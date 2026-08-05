@@ -22,12 +22,26 @@ ise_api_max_pages: 20
 ise_timeout: 60
 
 # The GUI/ERS/OpenAPI password, which is a different password from the CLI
-# one. `ISE_PASSWORD` in the environment wins so a run can be pointed at an
-# appliance that is not in this sops file.
+# one. Resolution order, first hit wins:
+#
+#   1. ISE_PASSWORD in the environment
+#   2. the sops store, and only when ise_password_sops is true
+#
+# sops is off by default because it is a separately installed Go binary and
+# because the store below is one particular machine's, not something a fresh
+# checkout can read. `-e ise_password_sops=true` turns it back on.
+#
+# The branch is an inline if/else rather than `| default(..., true)` on
+# purpose: Jinja evaluates filter arguments eagerly, so the `default` form ran
+# sops on every task even when ISE_PASSWORD was already set -- once per URI
+# call, hundreds of times in a full run. An if/else is lazy.
+ise_password_sops: false
 sops_file: /srv/nix-config/secrets/common.yaml
 sops_key: lab_ise_ui_admin_pw
 sops_cmd: "sops -d --extract '[\"{{ sops_key }}\"]' {{ sops_file }}"
-ise_password: "{{ lookup('env', 'ISE_PASSWORD') | default(lookup('pipe', sops_cmd), true) }}"
+ise_password: >-
+  {{ lookup('env', 'ISE_PASSWORD') if lookup('env', 'ISE_PASSWORD')
+     else (lookup('pipe', sops_cmd) if ise_password_sops | bool else '') }}
 
 # --- which families are collected at all ------------------------------------
 #

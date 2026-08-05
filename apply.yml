@@ -30,6 +30,10 @@
     # objects the export happened to capture.
     ise_site_only: false
 
+  pre_tasks:
+    - name: Check credentials
+      ansible.builtin.import_tasks: tasks/check_password.yml
+
   tasks:
     - name: Resolve which resources to apply
       ansible.builtin.set_fact:

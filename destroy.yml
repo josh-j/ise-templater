@@ -40,6 +40,10 @@
     ise_site_only: true
     ise_confirm_destroy_exported: false
 
+  pre_tasks:
+    - name: Check credentials
+      ansible.builtin.import_tasks: tasks/check_password.yml
+
   tasks:
     - name: Resolve which resources to walk, in reverse
       ansible.builtin.set_fact:

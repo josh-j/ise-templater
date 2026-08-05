@@ -19,6 +19,10 @@
   vars:
     export_dir: "{{ playbook_dir }}/exports/{{ inventory_hostname }}"
 
+  pre_tasks:
+    - name: Check credentials
+      ansible.builtin.import_tasks: tasks/check_password.yml
+
   tasks:
     - name: Resolve which resources to export
       ansible.builtin.set_fact:

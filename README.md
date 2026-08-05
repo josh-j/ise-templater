@@ -27,25 +27,35 @@ about sixty lines doing the three things Jinja cannot say cleanly.
 
 ## Setup
 
-The Python side is `pyproject.toml` plus `uv.lock` — `ansible-core` and what it
-pulls in, pinned:
+`pyproject.toml` plus `uv.lock` — `ansible-core` and what it pulls in, pinned.
+Python 3.12+, which is `ansible-core` 2.21's floor rather than ours.
 
 ```sh
 uv sync
+export ISE_PASSWORD=...
 ```
 
-`sops` is not in there. It is a Go binary with no usable PyPI distribution, so
-install it from your package manager and keep it on `PATH`; the playbooks shell
-out to it only to read the admin password.
+On a fresh Ubuntu Server 24.04 box, which ships Python 3.12.3:
 
-Requires Python 3.12+, which is `ansible-core` 2.21's floor rather than ours.
-Without `uv`, a plain `pip install ansible-core` in a virtualenv works too —
-nothing here depends on the lockfile.
+```sh
+sudo apt install -y python3-venv         # or curl -LsSf https://astral.sh/uv/install.sh | sh
+python3 -m venv .venv && . .venv/bin/activate && pip install ansible-core
+```
 
-The GUI/ERS/OpenAPI password is read from the nix-config sops store
-(`lab_ise_ui_admin_pw` in `/srv/nix-config/secrets/common.yaml`). This is the
-*UI* password, which on ISE is a separate credential from the CLI/SSH one.
-Override it for a one-off run with `ISE_PASSWORD=... uv run ansible-playbook ...`.
+Either way it is wheels the whole way down — `cryptography` and `cffi` have
+manylinux builds for CPython 3.12, so no compiler and no `-dev` packages. The
+`uv` route installs the locked versions; the `venv` route just takes what PyPI
+offers, which is fine since nothing here depends on the lockfile.
+
+There is no `sops` step and nothing to install for it. The admin password comes
+from `ISE_PASSWORD` in the environment, and the playbooks stop with a message
+saying so if it is unset. This is the *UI* password, which on ISE is a separate
+credential from the CLI/SSH one.
+
+The sops store is still there for the machine that has it —
+`-e ise_password_sops=true` reads `lab_ise_ui_admin_pw` out of
+`/srv/nix-config/secrets/common.yaml` — but it is off by default and never
+consulted otherwise.
 
 ## Use
 
