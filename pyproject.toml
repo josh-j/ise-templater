@@ -1,0 +1,21 @@
+[project]
+name = "ise-templater"
+version = "0.1.0"
+description = "Export Cisco ISE configuration, turn it into Jinja templates, apply it to another appliance"
+readme = "README.md"
+# ansible-core 2.21 dropped controller support below 3.12.
+requires-python = ">=3.12"
+
+# ansible-core alone. The playbooks use builtin modules exclusively -- no
+# collection, no ciscoisesdk -- and the one plugin they add is a local
+# filter_plugins/ise.py with no dependencies of its own.
+dependencies = ["ansible-core>=2.21,<2.22"]
+
+# sops and age are deliberately absent: they are Go binaries with no usable
+# PyPI distribution. Install them from your package manager and keep them on
+# PATH. The playbooks shell out to sops only to read the admin password.
+
+[tool.uv]
+# Nothing here is importable -- this is a set of playbooks with a dependency
+# list, not a Python package. Without this uv tries to build and install it.
+package = false

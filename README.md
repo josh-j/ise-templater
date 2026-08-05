@@ -27,46 +27,40 @@ about sixty lines doing the three things Jinja cannot say cleanly.
 
 ## Setup
 
-The build environment is a container. `Dockerfile` pins `ansible-core`, `sops`,
-`age` and `jq`; `run.sh` builds it on first use and runs a playbook inside it:
+The Python side is `pyproject.toml` plus `uv.lock` — `ansible-core` and what it
+pulls in, pinned:
 
 ```sh
-./run.sh export.yml
+uv sync
 ```
 
-The repo is mounted at `/work` rather than baked into the image, so exports and
-rendered templates land in your working tree, and the container runs as your
-uid so they belong to you. `podman` is used if present, otherwise `docker`;
-override with `ISE_ENGINE`, which may carry arguments — `ISE_ENGINE="sudo
-docker"` if your user is not in the `docker` group. `ISE_REBUILD=1` forces a
-rebuild.
+`sops` is not in there. It is a Go binary with no usable PyPI distribution, so
+install it from your package manager and keep it on `PATH`; the playbooks shell
+out to it only to read the admin password.
 
-Nothing about the playbooks requires the container. Anything with
-`ansible-core` 2.13+ and `sops` on `PATH` runs them directly.
+Requires Python 3.12+, which is `ansible-core` 2.21's floor rather than ours.
+Without `uv`, a plain `pip install ansible-core` in a virtualenv works too —
+nothing here depends on the lockfile.
 
 The GUI/ERS/OpenAPI password is read from the nix-config sops store
 (`lab_ise_ui_admin_pw` in `/srv/nix-config/secrets/common.yaml`). This is the
 *UI* password, which on ISE is a separate credential from the CLI/SSH one.
-`run.sh` mounts that store and your age key into the container read-only.
-Override the password for a one-off run with `ISE_PASSWORD=... ./run.sh ...`.
+Override it for a one-off run with `ISE_PASSWORD=... uv run ansible-playbook ...`.
 
 ## Use
 
 ```sh
-./run.sh export.yml
-./run.sh templatize.yml
-./run.sh apply.yml -e ise_dry_run=true      # look first
-./run.sh apply.yml
+uv run ansible-playbook export.yml
+uv run ansible-playbook templatize.yml
+uv run ansible-playbook apply.yml -e ise_dry_run=true      # look first
+uv run ansible-playbook apply.yml
 ```
 
 Narrow any of them to specific resources:
 
 ```sh
-./run.sh export.yml -e resources=policy-set,condition
+uv run ansible-playbook export.yml -e resources=policy-set,condition
 ```
-
-`./run.sh shell` drops you into the container with the toolchain on `PATH`,
-for running `ansible-playbook` or `sops` by hand.
 
 ## Inventory
 
@@ -97,7 +91,7 @@ all four playbooks as if it were not in the catalog:
 | `lifecycle` | **off** | node groups, trusted certs, session service nodes |
 
 ```sh
-./run.sh export.yml -e ise_group_portals_override=true
+uv run ansible-playbook export.yml -e ise_group_portals_override=true
 ```
 
 Off by default is about signal, not capability: portals are large nested
@@ -256,8 +250,8 @@ before writing it.
 is one file per *kind* of object, rendered once per entry in `sites.yml`:
 
 ```sh
-./run.sh apply.yml -e @sites.yml -e ise_dry_run=true
-./run.sh apply.yml -e @sites.yml
+uv run ansible-playbook apply.yml -e @sites.yml -e ise_dry_run=true
+uv run ansible-playbook apply.yml -e @sites.yml
 ```
 
 Nothing in the apply path needed changing to support it: object identity already
@@ -315,8 +309,8 @@ would supply.
 ## Tearing it down
 
 ```sh
-./run.sh destroy.yml -e @sites.yml                      # show only
-./run.sh destroy.yml -e @sites.yml -e ise_dry_run=false
+uv run ansible-playbook destroy.yml -e @sites.yml                      # show only
+uv run ansible-playbook destroy.yml -e @sites.yml -e ise_dry_run=false
 ```
 
 `destroy.yml` is dry by default — the opposite of `apply.yml`. You have to ask

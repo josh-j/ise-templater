@@ -1,4 +1,0 @@
-# The image installs a toolchain and copies nothing -- run.sh mounts the repo
-# at runtime. Keeping the build context empty means editing a template does
-# not invalidate the build cache.
-*
