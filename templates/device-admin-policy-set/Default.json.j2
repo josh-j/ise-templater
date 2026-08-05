@@ -1,0 +1,44 @@
+{
+    "authentication": [
+        {
+            "identitySourceName": "All_User_ID_Stores",
+            "ifAuthFail": "REJECT",
+            "ifProcessFail": "DROP",
+            "ifUserNotFound": "REJECT",
+            "rule": {
+                "condition": null,
+                "default": true,
+                "name": "Default",
+                "rank": 0,
+                "state": "enabled"
+            }
+        }
+    ],
+    "authorization": [
+        {
+            "commands": [
+                "DenyAllCommands"
+            ],
+            "profile": "Deny All Shell Profile",
+            "rule": {
+                "condition": null,
+                "default": true,
+                "name": "Default",
+                "rank": 0,
+                "state": "enabled"
+            }
+        }
+    ],
+    "exception": [],
+    "name": "Default",
+    "policySet": {
+        "condition": null,
+        "default": true,
+        "description": "Tacacs Default policy set",
+        "isProxy": false,
+        "name": "Default",
+        "rank": 0,
+        "serviceName": "Default Device Admin",
+        "state": "enabled"
+    }
+}

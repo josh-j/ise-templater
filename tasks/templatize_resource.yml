@@ -1,0 +1,110 @@
+---
+# One export file in, one .j2 per object out.
+
+- name: "{{ res.resource }}: read the export"
+  ansible.builtin.set_fact:
+    exported: >-
+      {{ (lookup('file', export_dir ~ '/' ~ res.resource ~ '.json', errors='ignore')
+          | default('[]', true) | from_json)
+         | ise_reject_field((res.templatize_skip | default({})).field | default(''),
+                            (res.templatize_skip | default({})).equals | default(none)) }}
+
+# id -> name for this resource's own objects, so a parent reference can be
+# written as the parent's name instead of the source appliance's UUID.
+- name: "{{ res.resource }}: index the export by id"
+  ansible.builtin.set_fact:
+    export_id_to_name: >-
+      {{ dict(exported | map(attribute='id')
+              | zip(exported | map(attribute=res.name_key | default('name'))))
+         if res.parent_ref is defined else {} }}
+
+# id -> name for the OTHER resources this one points at, read from their own
+# exports. An egress matrix cell is three references and nothing else, so
+# without these it templatises into a set of source-appliance UUIDs.
+- name: "{{ res.resource }}: start with no reference maps"
+  ansible.builtin.set_fact:
+    ref_maps: {}
+
+- name: "{{ res.resource }}: index the resources it references"
+  ansible.builtin.set_fact:
+    ref_maps: >-
+      {{ ref_maps | combine({item: dict(
+           referenced | map(attribute='id')
+           | zip(referenced | map(attribute='name'))) }) }}
+  vars:
+    referenced: >-
+      {{ lookup('file', export_dir ~ '/' ~ item ~ '.json', errors='ignore')
+         | default('[]', true) | from_json }}
+  loop: "{{ (res.refs | default([])) | map(attribute='resource') | unique | list }}"
+  loop_control:
+    label: "{{ item }}"
+
+# Some referenced objects are hidden from their own collection listing. The
+# reserved SGT "ANY" (value 65535) is the one that matters here: every default
+# egress cell points at it, GET by id and GET by name both return it, and it
+# is absent from /ers/config/sgt. A map built only from the listing therefore
+# leaves the commonest reference in TrustSec unresolved.
+- name: "{{ res.resource }}: find references the listings do not carry"
+  ansible.builtin.set_fact:
+    missing_refs: >-
+      {{ exported | map('ise_unresolved_refs', res.refs | default([]), ref_maps)
+         | flatten | unique | list }}
+  when: res.refs is defined
+
+- name: "{{ res.resource }}: fetch each one directly"
+  ansible.builtin.uri:
+    url: "{{ ise_ers_url }}/config/{{ item.resource }}/{{ item.id }}"
+    user: "{{ ise_user }}"
+    password: "{{ ise_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ ise_validate_certs }}"
+    status_code: [200, 404]
+    headers:
+      Accept: application/json
+  register: direct_refs
+  check_mode: false
+  loop: "{{ missing_refs | default([]) }}"
+  loop_control:
+    label: "{{ item.resource }}/{{ item.id }}"
+
+- name: "{{ res.resource }}: fold them into the maps"
+  ansible.builtin.set_fact:
+    ref_maps: >-
+      {{ ref_maps | combine({item.item.resource:
+           (ref_maps[item.item.resource] | default({}))
+           | combine({item.item.id: (item.json.values() | list | first).name}) },
+         recursive=True) }}
+  loop: "{{ direct_refs.results | default([]) | selectattr('status', 'equalto', 200) | list }}"
+  loop_control:
+    label: "{{ item.item.resource }}/{{ item.item.id }}"
+
+- name: "{{ res.resource }}: create the template directory"
+  ansible.builtin.file:
+    path: "{{ template_dir }}/{{ res.resource }}"
+    state: directory
+    mode: "0755"
+  when: exported | length > 0
+
+- name: "{{ res.resource }}: write one template per object"
+  ansible.builtin.copy:
+    # Three things happen here, in order. Strip the server-owned fields
+    # recursively -- policy set rules nest their own ids and hit counts
+    # several levels down. Put ERS objects back under the wrapper key POST
+    # and PUT expect; OpenAPI objects are sent bare. Then rewrite the
+    # site-specific literals as Jinja references.
+    content: >-
+      {{ ({res.root: (obj | ise_swap_ref(export_id_to_name,
+                                         (res.parent_ref | default({})).id_field | default('_none'),
+                                         (res.parent_ref | default({})).name_field | default('_none'))
+                          | ise_swap_refs(res.refs | default([]), ref_maps, true))}
+          if res.root is defined else obj)
+         | ise_strip(ise_strip_keys + (res.strip | default([])))
+         | to_nice_json
+         | ise_tokenize(ise_tokens) }}
+    dest: >-
+      {{ template_dir }}/{{ res.resource }}/{{ obj | ise_name_of(res.name_key | default('name')) | ise_slug }}.json.j2
+    mode: "0644"
+  loop: "{{ exported }}"
+  loop_control:
+    loop_var: obj
+    label: "{{ obj | ise_name_of(res.name_key | default('name')) }}"

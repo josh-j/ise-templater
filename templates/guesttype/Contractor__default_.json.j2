@@ -1,0 +1,51 @@
+{
+    "GuestType": {
+        "accessTime": {
+            "allowAccessOnSpecificDaysTimes": false,
+            "dayTimeLimits": [
+                {
+                    "days": [
+                        "Monday",
+                        "Tuesday",
+                        "Wednesday",
+                        "Thursday",
+                        "Friday"
+                    ],
+                    "endTime": "17:00",
+                    "startTime": "09:00"
+                }
+            ],
+            "defaultDuration": 90,
+            "durationTimeUnit": "DAYS",
+            "fromFirstLogin": false,
+            "maxAccountDuration": 365
+        },
+        "allowDynamicIdentityGroups": false,
+        "description": "Default settings allow network access for up to a year.",
+        "dynamicGroups": [],
+        "expirationNotification": {
+            "advanceNotificationDuration": 3,
+            "advanceNotificationUnits": "DAYS",
+            "emailText": "Your account is going to expire in 3 days. Please notify your sponsor to extend your account now to avoid any delays.",
+            "enableNotification": false,
+            "sendEmailNotification": false,
+            "sendSmsNotification": false,
+            "smsText": "Your account is going to expire in 3 days. Please notify your sponsor to extend your account now to avoid any delays."
+        },
+        "isDefaultType": true,
+        "loginOptions": {
+            "allowGuestPortalBypass": false,
+            "failureAction": "Disconnect_Oldest_Connection",
+            "identityGroupId": "aa178bd0-8bff-11e6-996c-525400b48521",
+            "limitSimultaneousLogins": true,
+            "maxRegisteredDevices": 5,
+            "maxSimultaneousLogins": 3
+        },
+        "name": "Contractor (default)",
+        "sponsorGroups": [
+            "GROUP_ACCOUNTS (default)",
+            "ALL_ACCOUNTS (default)",
+            "OWN_ACCOUNTS (default)"
+        ]
+    }
+}

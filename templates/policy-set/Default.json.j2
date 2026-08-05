@@ -1,0 +1,422 @@
+{
+    "authentication": [
+        {
+            "identitySourceName": "Internal Endpoints",
+            "ifAuthFail": "REJECT",
+            "ifProcessFail": "DROP",
+            "ifUserNotFound": "CONTINUE",
+            "rule": {
+                "condition": {
+                    "children": [
+                        {
+                            "conditionType": "ConditionReference",
+                            "description": "A condition to match MAC Authentication Bypass service based authentication requests from switches, according to the corresponding MAB attributes defined in the device profile.",
+                            "isNegate": false,
+                            "name": "Wired_MAB"
+                        },
+                        {
+                            "conditionType": "ConditionReference",
+                            "description": "A condition to match MAC Authentication Bypass service based authentication requests from wireless LAN controllers, according to the corresponding MAB attributes defined in the device profile.",
+                            "isNegate": false,
+                            "name": "Wireless_MAB"
+                        }
+                    ],
+                    "conditionType": "ConditionOrBlock",
+                    "isNegate": false
+                },
+                "default": false,
+                "name": "MAB",
+                "rank": 0,
+                "state": "enabled"
+            }
+        },
+        {
+            "identitySourceName": "lab.local",
+            "ifAuthFail": "REJECT",
+            "ifProcessFail": "DROP",
+            "ifUserNotFound": "REJECT",
+            "rule": {
+                "condition": {
+                    "children": [
+                        {
+                            "conditionType": "ConditionReference",
+                            "description": "A condition to match 802.1X based authentication requests from switches, according to the corresponding 802.1x attributes defined in the device profile.",
+                            "isNegate": false,
+                            "name": "Wired_802.1X"
+                        },
+                        {
+                            "conditionType": "ConditionReference",
+                            "description": "A condition to match 802.1X based authentication requests from wireless LAN controllers, according to the corresponding 802.1x attributes defined in the device profile.",
+                            "isNegate": false,
+                            "name": "Wireless_802.1X"
+                        }
+                    ],
+                    "conditionType": "ConditionOrBlock",
+                    "isNegate": false
+                },
+                "default": false,
+                "name": "Dot1X",
+                "rank": 1,
+                "state": "enabled"
+            }
+        },
+        {
+            "identitySourceName": "Internal Users",
+            "ifAuthFail": "REJECT",
+            "ifProcessFail": "DROP",
+            "ifUserNotFound": "REJECT",
+            "rule": {
+                "condition": null,
+                "default": true,
+                "name": "Default",
+                "rank": 2,
+                "state": "enabled"
+            }
+        }
+    ],
+    "authorization": [
+        {
+            "profile": [
+                "PermitAccess"
+            ],
+            "rule": {
+                "condition": {
+                    "conditionType": "ConditionReference",
+                    "description": "A condition to match MAC Authentication Bypass service based authentication requests from switches, according to the corresponding MAB attributes defined in the device profile.",
+                    "isNegate": false,
+                    "name": "Wired_MAB"
+                },
+                "default": false,
+                "name": "Lab_MAB_Permit",
+                "rank": 0,
+                "state": "enabled"
+            },
+            "securityGroup": null
+        },
+        {
+            "profile": [
+                "Block_Wireless_Access"
+            ],
+            "rule": {
+                "condition": {
+                    "children": [
+                        {
+                            "conditionType": "ConditionReference",
+                            "description": "Default condition used to match any authentication request from Cisco Wireless LAN Controller.",
+                            "isNegate": false,
+                            "name": "Wireless_Access"
+                        },
+                        {
+                            "attributeName": "Name",
+                            "attributeValue": "Endpoint Identity Groups:Blocked List",
+                            "conditionType": "ConditionAttributes",
+                            "dictionaryName": "IdentityGroup",
+                            "dictionaryValue": null,
+                            "isNegate": false,
+                            "operator": "equals"
+                        }
+                    ],
+                    "conditionType": "ConditionAndBlock",
+                    "isNegate": false
+                },
+                "default": false,
+                "name": "Wireless Block List Default",
+                "rank": 1,
+                "state": "enabled"
+            },
+            "securityGroup": null
+        },
+        {
+            "profile": [
+                "Cisco_IP_Phones"
+            ],
+            "rule": {
+                "condition": {
+                    "attributeName": "Name",
+                    "attributeValue": "Endpoint Identity Groups:Profiled:Cisco-IP-Phone",
+                    "conditionType": "ConditionAttributes",
+                    "dictionaryName": "IdentityGroup",
+                    "dictionaryValue": null,
+                    "isNegate": false,
+                    "operator": "equals"
+                },
+                "default": false,
+                "name": "Profiled Cisco IP Phones",
+                "rank": 2,
+                "state": "enabled"
+            },
+            "securityGroup": null
+        },
+        {
+            "profile": [
+                "Non_Cisco_IP_Phones"
+            ],
+            "rule": {
+                "condition": {
+                    "conditionType": "ConditionReference",
+                    "description": "Default condition used to match Non Cisco IP Phones",
+                    "isNegate": false,
+                    "name": "Non_Cisco_Profiled_Phones"
+                },
+                "default": false,
+                "name": "Profiled Non Cisco IP Phones",
+                "rank": 3,
+                "state": "enabled"
+            },
+            "securityGroup": null
+        },
+        {
+            "profile": [
+                "Cisco_Temporal_Onboard"
+            ],
+            "rule": {
+                "condition": {
+                    "children": [
+                        {
+                            "conditionType": "ConditionReference",
+                            "description": "Default condition used for basic Network Access requiring that authentication was successful.",
+                            "isNegate": false,
+                            "name": "Network_Access_Authentication_Passed"
+                        },
+                        {
+                            "conditionType": "ConditionReference",
+                            "description": "Default condition for unknown compliance devices",
+                            "isNegate": false,
+                            "name": "Compliance_Unknown_Devices"
+                        }
+                    ],
+                    "conditionType": "ConditionAndBlock",
+                    "isNegate": false
+                },
+                "default": false,
+                "name": "Unknown_Compliance_Redirect",
+                "rank": 4,
+                "state": "disabled"
+            },
+            "securityGroup": null
+        },
+        {
+            "profile": [
+                "Cisco_Temporal_Onboard"
+            ],
+            "rule": {
+                "condition": {
+                    "children": [
+                        {
+                            "conditionType": "ConditionReference",
+                            "description": "Default condition used for basic Network Access requiring that authentication was successful.",
+                            "isNegate": false,
+                            "name": "Network_Access_Authentication_Passed"
+                        },
+                        {
+                            "conditionType": "ConditionReference",
+                            "description": "Default condition for non-compliant devices",
+                            "isNegate": false,
+                            "name": "Non_Compliant_Devices"
+                        }
+                    ],
+                    "conditionType": "ConditionAndBlock",
+                    "isNegate": false
+                },
+                "default": false,
+                "name": "NonCompliant_Devices_Redirect",
+                "rank": 5,
+                "state": "disabled"
+            },
+            "securityGroup": null
+        },
+        {
+            "profile": [
+                "PermitAccess"
+            ],
+            "rule": {
+                "condition": {
+                    "children": [
+                        {
+                            "conditionType": "ConditionReference",
+                            "description": "Default condition used for basic Network Access requiring that authentication was successful.",
+                            "isNegate": false,
+                            "name": "Network_Access_Authentication_Passed"
+                        },
+                        {
+                            "conditionType": "ConditionReference",
+                            "description": "Default condition for compliant devices",
+                            "isNegate": false,
+                            "name": "Compliant_Devices"
+                        }
+                    ],
+                    "conditionType": "ConditionAndBlock",
+                    "isNegate": false
+                },
+                "default": false,
+                "name": "Compliant_Devices_Access",
+                "rank": 6,
+                "state": "disabled"
+            },
+            "securityGroup": null
+        },
+        {
+            "profile": [
+                "PermitAccess"
+            ],
+            "rule": {
+                "condition": {
+                    "children": [
+                        {
+                            "conditionType": "ConditionReference",
+                            "description": "A condition to match 802.1X based authentication requests from wireless LAN controllers, according to the corresponding 802.1x attributes defined in the device profile.",
+                            "isNegate": false,
+                            "name": "Wireless_802.1X"
+                        },
+                        {
+                            "conditionType": "ConditionReference",
+                            "description": "Default condition for BYOD flow for any device that has passed the NSP process",
+                            "isNegate": false,
+                            "name": "BYOD_is_Registered"
+                        },
+                        {
+                            "conditionType": "ConditionReference",
+                            "description": "Default condition for BYOD flow for any device that has passed the NSP process",
+                            "isNegate": false,
+                            "name": "EAP-TLS"
+                        },
+                        {
+                            "conditionType": "ConditionReference",
+                            "description": "Default condition for BYOD flow for any device that has passed the NSP process",
+                            "isNegate": false,
+                            "name": "MAC_in_SAN"
+                        }
+                    ],
+                    "conditionType": "ConditionAndBlock",
+                    "isNegate": false
+                },
+                "default": false,
+                "name": "Employee_EAP-TLS",
+                "rank": 7,
+                "state": "disabled"
+            },
+            "securityGroup": "BYOD"
+        },
+        {
+            "profile": [
+                "NSP_Onboard"
+            ],
+            "rule": {
+                "condition": {
+                    "children": [
+                        {
+                            "conditionType": "ConditionReference",
+                            "description": "A condition to match 802.1X based authentication requests from wireless LAN controllers, according to the corresponding 802.1x attributes defined in the device profile.",
+                            "isNegate": false,
+                            "name": "Wireless_802.1X"
+                        },
+                        {
+                            "conditionType": "ConditionReference",
+                            "description": "Default condition for BYOD Onboarding flow",
+                            "isNegate": false,
+                            "name": "EAP-MSCHAPv2"
+                        }
+                    ],
+                    "conditionType": "ConditionAndBlock",
+                    "isNegate": false
+                },
+                "default": false,
+                "name": "Employee_Onboarding",
+                "rank": 8,
+                "state": "disabled"
+            },
+            "securityGroup": "BYOD"
+        },
+        {
+            "profile": [
+                "PermitAccess"
+            ],
+            "rule": {
+                "condition": {
+                    "children": [
+                        {
+                            "conditionType": "ConditionReference",
+                            "description": "Default condition for guest flow",
+                            "isNegate": false,
+                            "name": "Guest_Flow"
+                        },
+                        {
+                            "conditionType": "ConditionReference",
+                            "description": "A condition to match MAC Authentication Bypass service based authentication requests from wireless LAN controllers, according to the corresponding MAB attributes defined in the device profile.",
+                            "isNegate": false,
+                            "name": "Wireless_MAB"
+                        }
+                    ],
+                    "conditionType": "ConditionAndBlock",
+                    "isNegate": false
+                },
+                "default": false,
+                "name": "Wi-Fi_Guest_Access",
+                "rank": 9,
+                "state": "disabled"
+            },
+            "securityGroup": "Guests"
+        },
+        {
+            "profile": [
+                "Cisco_WebAuth"
+            ],
+            "rule": {
+                "condition": {
+                    "conditionType": "ConditionReference",
+                    "description": "A condition to match MAC Authentication Bypass service based authentication requests from wireless LAN controllers, according to the corresponding MAB attributes defined in the device profile.",
+                    "isNegate": false,
+                    "name": "Wireless_MAB"
+                },
+                "default": false,
+                "name": "Wi-Fi_Redirect_to_Guest_Login",
+                "rank": 10,
+                "state": "disabled"
+            },
+            "securityGroup": null
+        },
+        {
+            "profile": [
+                "PermitAccess"
+            ],
+            "rule": {
+                "condition": {
+                    "conditionType": "ConditionReference",
+                    "description": "Default condition used for basic Network Access requiring that authentication was successful.",
+                    "isNegate": false,
+                    "name": "Network_Access_Authentication_Passed"
+                },
+                "default": false,
+                "name": "Basic_Authenticated_Access",
+                "rank": 11,
+                "state": "enabled"
+            },
+            "securityGroup": null
+        },
+        {
+            "profile": [
+                "DenyAccess"
+            ],
+            "rule": {
+                "condition": null,
+                "default": true,
+                "name": "Default",
+                "rank": 12,
+                "state": "enabled"
+            },
+            "securityGroup": null
+        }
+    ],
+    "exception": [],
+    "name": "Default",
+    "policySet": {
+        "condition": null,
+        "default": true,
+        "description": "Default policy set",
+        "isProxy": false,
+        "name": "Default",
+        "rank": 3,
+        "serviceName": "Default Network Access",
+        "state": "enabled"
+    }
+}

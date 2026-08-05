@@ -1,0 +1,10 @@
+{
+    "conditionType": "LibraryConditionAttributes",
+    "name": "{{ site.slug }}_At_Site",
+    "description": "Request came from a network device at {{ site.name }}",
+    "dictionaryName": "DEVICE",
+    "attributeName": "Location",
+    "operator": "equals",
+    "attributeValue": "{{ site.location }}",
+    "isNegate": false
+}

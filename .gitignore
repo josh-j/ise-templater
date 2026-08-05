@@ -1,0 +1,9 @@
+# Raw exports carry live values -- RADIUS shared secrets among them -- in
+# cleartext. Templates are the artefact meant to be committed; exports are
+# scratch. Remove this line only if you have decided otherwise on purpose.
+exports/
+
+.direnv/
+*.retry
+
+__pycache__/

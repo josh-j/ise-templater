@@ -1,0 +1,51 @@
+{
+    "GuestType": {
+        "accessTime": {
+            "allowAccessOnSpecificDaysTimes": false,
+            "dayTimeLimits": [
+                {
+                    "days": [
+                        "Monday",
+                        "Tuesday",
+                        "Wednesday",
+                        "Thursday",
+                        "Friday"
+                    ],
+                    "endTime": "17:00",
+                    "startTime": "09:00"
+                }
+            ],
+            "defaultDuration": 1,
+            "durationTimeUnit": "DAYS",
+            "fromFirstLogin": true,
+            "maxAccountDuration": 5
+        },
+        "allowDynamicIdentityGroups": false,
+        "description": "Default settings for social login users to allow network access for just 1-5 days.",
+        "dynamicGroups": [],
+        "expirationNotification": {
+            "advanceNotificationDuration": 3,
+            "advanceNotificationUnits": "DAYS",
+            "emailText": "Your account is going to expire in 3 days. Please notify your sponsor to extend your account now to avoid any delays.",
+            "enableNotification": false,
+            "sendEmailNotification": false,
+            "sendSmsNotification": false,
+            "smsText": "Your account is going to expire in 3 days. Please notify your sponsor to extend your account now to avoid any delays."
+        },
+        "isDefaultType": true,
+        "loginOptions": {
+            "allowGuestPortalBypass": false,
+            "failureAction": "Disconnect_Oldest_Connection",
+            "identityGroupId": "aa178bd0-8bff-11e6-996c-525400b48521",
+            "limitSimultaneousLogins": true,
+            "maxRegisteredDevices": 5,
+            "maxSimultaneousLogins": 3
+        },
+        "name": "SocialLogin (default)",
+        "sponsorGroups": [
+            "GROUP_ACCOUNTS (default)",
+            "ALL_ACCOUNTS (default)",
+            "OWN_ACCOUNTS (default)"
+        ]
+    }
+}

@@ -1,0 +1,26 @@
+{
+    "AuthorizationProfile": {
+        "accessType": "ACCESS_ACCEPT",
+        "advancedAttributes": [
+            {
+                "leftHandSideDictionaryAttribue": {
+                    "AdvancedAttributeValueType": "AdvancedDictionaryAttribute",
+                    "attributeName": "cisco-av-pair",
+                    "dictionaryName": "Cisco"
+                },
+                "rightHandSideAttribueValue": {
+                    "AdvancedAttributeValueType": "AttributeValue",
+                    "value": "url-redirect=https://ip:port/blockedportal/gateway?portal=24adc791-7fb9-4b3f-aaf9-080680804fee"
+                }
+            }
+        ],
+        "agentlessPosture": false,
+        "authzProfileType": "SWITCH",
+        "description": "Default profile used to block wireless devices. Ensure that you configure a NULL ROUTE ACL on the Wireless LAN Controller",
+        "easywiredSessionCandidate": false,
+        "name": "Block_Wireless_Access",
+        "profileName": "Cisco",
+        "serviceTemplate": false,
+        "trackMovement": false
+    }
+}

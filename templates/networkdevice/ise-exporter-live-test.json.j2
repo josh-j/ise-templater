@@ -1,0 +1,32 @@
+{
+    "NetworkDevice": {
+        "NetworkDeviceGroupList": [
+            "Location#All Locations#Branch",
+            "Device Type#All Device Types#VPN",
+            "Ops Owner#All Ops Owners#Network Team",
+            "IPSEC#Is IPSEC Device#No"
+        ],
+        "NetworkDeviceIPList": [
+            {
+                "ipaddress": "10.200.30.1",
+                "mask": 32
+            }
+        ],
+        "authenticationSettings": {
+            "dtlsRequired": false,
+            "enableKeyWrap": false,
+            "enableMultiSecret": "false",
+            "keyInputFormat": "ASCII",
+            "networkProtocol": "RADIUS",
+            "radiusSharedSecret": "{{ site_radius_secret_lab }}"
+        },
+        "coaPort": 1700,
+        "description": "Dedicated ise-exporter TACACS live-test client",
+        "name": "ise-exporter-live-test",
+        "profileName": "Cisco",
+        "tacacsSettings": {
+            "connectModeOptions": "ON_LEGACY",
+            "sharedSecret": "{{ site_radius_secret_lab }}"
+        }
+    }
+}

@@ -1,0 +1,28 @@
+{
+    "NetworkDevice": {
+        "NetworkDeviceGroupList": [
+            "Location#All Locations#Campus",
+            "Device Type#All Device Types#Switch",
+            "Ops Owner#All Ops Owners#Network Team",
+            "IPSEC#Is IPSEC Device#No"
+        ],
+        "NetworkDeviceIPList": [
+            {
+                "ipaddress": "10.77.0.0",
+                "mask": 24
+            }
+        ],
+        "authenticationSettings": {
+            "dtlsRequired": false,
+            "enableKeyWrap": false,
+            "enableMultiSecret": "false",
+            "keyInputFormat": "ASCII",
+            "networkProtocol": "RADIUS",
+            "radiusSharedSecret": "{{ site_radius_secret_cml }}"
+        },
+        "coaPort": 1700,
+        "description": "CML IOSvL2 dot1x/MAB (IBNS 2.0)",
+        "name": "CML-Switches",
+        "profileName": "Cisco"
+    }
+}

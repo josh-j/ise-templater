@@ -1,0 +1,37 @@
+{
+    "AllowedProtocols": {
+        "name": "{{ site.slug }}_Network_Access",
+        "description": "Allowed authentication protocols at {{ site.name }}",
+        "allowChap": false,
+        "allowEapFast": false,
+        "allowEapMd5": false,
+        "allowEapTls": true,
+        "allowEapTtls": false,
+        "allowLeap": false,
+        "allowMsChapV1": false,
+        "allowMsChapV2": false,
+        "allowPapAscii": false,
+        "allowPeap": true,
+        "allowPreferredEapProtocol": false,
+        "allowTeap": false,
+        "allowWeakCiphersForEap": false,
+        "eapTlsLBit": false,
+        "fiveG": false,
+        "processHostLookup": true,
+        "requireMessageAuth": false,
+        "eapTls": {
+            "allowEapTlsAuthOfExpiredCerts": false,
+            "eapTlsEnableStatelessSessionResume": false
+        },
+        "peap": {
+            "allowPeapV0": false,
+            "allowPeapEapMsChapV2": true,
+            "allowPeapEapMsChapV2PwdChange": true,
+            "allowPeapEapMsChapV2PwdChangeRetries": 1,
+            "allowPeapEapGtc": false,
+            "allowPeapEapTls": true,
+            "allowPeapEapTlsAuthOfExpiredCerts": false,
+            "requireCryptobinding": false
+        }
+    }
+}

@@ -1,0 +1,93 @@
+---
+# A policy set and the rules that make it mean anything, applied together.
+
+- name: Note the policy set name
+  ansible.builtin.set_fact:
+    obj_name: "{{ obj.name }}"
+    # Every condition reference in the document still carries the source
+    # appliance's condition id. Repoint them at the target's own ids, matched
+    # by condition name, before anything is written.
+    doc: "{{ obj | ise_rewrite_condition_ids(condition_map) }}"
+
+- name: Check what {{ obj_name }} depends on
+  ansible.builtin.include_tasks: tasks/apply_policyset_preflight.yml
+
+- name: Read policy sets on the target
+  ansible.builtin.uri:
+    url: "{{ ise_api_url }}{{ res.path }}"
+  register: target_sets
+  check_mode: false
+
+- name: Resolve the existing policy set id, if any
+  ansible.builtin.set_fact:
+    existing_id: >-
+      {{ (target_sets.json.response | selectattr('name', 'equalto', obj_name)
+          | map(attribute='id') | list | first) | default('', true) }}
+
+- name: Report the intended change
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'CREATE' if existing_id == '' else 'UPDATE' }} {{ res.resource }} {{ obj_name }}
+      ({{ res.children | map('extract', doc) | select | map('length') | sum }} rules)
+  when: ise_dry_run | bool
+
+# Ranks are a dense sequence: a new set has to take one inside the existing
+# range or ISE rejects it outright ("Rank=99. Must be in range between 0 and
+# 3"). So a template cannot carry a rank -- it is assigned here, immediately
+# above the Default set, which keeps Default last where it belongs.
+- name: Choose where {{ obj_name }} goes in the order
+  ansible.builtin.set_fact:
+    insert_rank: >-
+      {{ (target_sets.json.response | selectattr('default') | map(attribute='rank')
+          | list | first) | default(target_sets.json.response | length, true) }}
+  when: existing_id == ''
+
+- name: Create policy set {{ obj_name }}
+  ansible.builtin.uri:
+    url: "{{ ise_api_url }}{{ res.path }}"
+    method: POST
+    body_format: json
+    body: "{{ doc.policySet | combine({'rank': insert_rank | int}) }}"
+    status_code: [200, 201]
+  register: created_set
+  when:
+    - existing_id == ''
+    - not (ise_dry_run | bool)
+
+- name: Update policy set {{ obj_name }}
+  ansible.builtin.uri:
+    url: "{{ ise_api_url }}{{ res.path }}/{{ existing_id }}"
+    method: PUT
+    body_format: json
+    body: "{{ doc.policySet | combine({'id': existing_id}) }}"
+    status_code: [200]
+  when:
+    - existing_id != ''
+    - not (ise_dry_run | bool)
+
+# Re-read rather than trust the create response: a POST answers with the
+# object it made, but a dry run made nothing and an update never had an id
+# problem to begin with. One lookup covers all three cases.
+- name: Re-resolve the policy set id
+  ansible.builtin.uri:
+    url: "{{ ise_api_url }}{{ res.path }}"
+  register: target_sets_after
+  check_mode: false
+  when: not (ise_dry_run | bool)
+
+- name: Note the policy set id to hang rules off
+  ansible.builtin.set_fact:
+    policyset_id: >-
+      {{ (target_sets_after.json.response | selectattr('name', 'equalto', obj_name)
+          | map(attribute='id') | list | first) | default('', true) }}
+  when: not (ise_dry_run | bool)
+
+- name: Apply each rule collection
+  ansible.builtin.include_tasks: tasks/apply_policyset_rules.yml
+  loop: "{{ res.children }}"
+  loop_control:
+    loop_var: child
+    label: "{{ obj_name }}/{{ child }}"
+  when:
+    - not (ise_dry_run | bool)
+    - policyset_id != ''

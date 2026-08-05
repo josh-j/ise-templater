@@ -1,0 +1,38 @@
+---
+# One rule. ISE creates a default rule with every policy set, so the default
+# can only ever be updated -- a POST of one is rejected.
+
+- name: Note the rule
+  ansible.builtin.set_fact:
+    rule_name: "{{ rule_doc.rule.name }}"
+    rule_id: "{{ target_rule_ids[rule_doc.rule.name] | default('', true) }}"
+
+- name: Create rule {{ rule_name }}
+  ansible.builtin.uri:
+    url: "{{ ise_api_url }}{{ res.path }}/{{ policyset_id }}/{{ child }}"
+    method: POST
+    body_format: json
+    body: "{{ rule_doc }}"
+    status_code: [200, 201]
+  when:
+    - rule_id == ''
+    - not (rule_doc.rule.default | default(false))
+
+- name: Update rule {{ rule_name }}
+  ansible.builtin.uri:
+    url: "{{ ise_api_url }}{{ res.path }}/{{ policyset_id }}/{{ child }}/{{ rule_id }}"
+    method: PUT
+    body_format: json
+    body: "{{ rule_doc }}"
+    status_code: [200]
+  when: rule_id != ''
+
+- name: Note a default rule the target does not have
+  ansible.builtin.debug:
+    msg: >-
+      Skipped default rule {{ rule_name }} in {{ obj_name }}/{{ child }}:
+      ISE creates the default with the policy set and refuses a POST of one,
+      but the target has no rule under that name to update.
+  when:
+    - rule_id == ''
+    - rule_doc.rule.default | default(false)

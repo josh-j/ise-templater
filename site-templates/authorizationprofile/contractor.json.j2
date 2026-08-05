@@ -1,0 +1,14 @@
+{
+    "AuthorizationProfile": {
+        "name": "{{ site.slug }}_Contractor_Limited",
+        "description": "Contractor access at {{ site.name }}, VLAN {{ site.contractor_vlan }}",
+        "accessType": "ACCESS_ACCEPT",
+        "authzProfileType": "SWITCH",
+        "profileName": "Cisco",
+        "vlan": {
+            "nameID": "{{ site.contractor_vlan }}",
+            "tagID": 1
+        },
+        "daclName": "{{ site.slug }}_Contractor_DACL"
+    }
+}

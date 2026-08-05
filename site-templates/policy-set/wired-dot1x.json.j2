@@ -1,0 +1,96 @@
+{
+    "name": "{{ site.name }} Wired 802.1X",
+    "policySet": {
+        "name": "{{ site.name }} Wired 802.1X",
+        "description": "Wired 802.1X for {{ site.name }}, generated from site-templates/policy-set/wired-dot1x.json.j2",
+        "default": false,
+        "isProxy": false,
+        "serviceName": "{{ site.slug }}_Network_Access",
+        "state": "enabled",
+        "condition": {
+            "conditionType": "ConditionAndBlock",
+            "isNegate": false,
+            "children": [
+                {
+                    "conditionType": "ConditionReference",
+                    "name": "{{ site.slug }}_Wired_Dot1x"
+                },
+                {
+                    "conditionType": "ConditionReference",
+                    "name": "{{ site.slug }}_At_Site"
+                }
+            ]
+        }
+    },
+    "authentication": [
+        {
+            "identitySourceName": "{{ site.slug }}_ID_Sequence",
+            "ifAuthFail": "REJECT",
+            "ifUserNotFound": "REJECT",
+            "ifProcessFail": "DROP",
+            "rule": {
+                "name": "Default",
+                "default": true,
+                "rank": 0,
+                "state": "enabled",
+                "condition": null
+            }
+        }
+    ],
+    "authorization": [
+        {
+            "profile": ["{{ site.slug }}_Employee_Full"],
+            "securityGroup": "{{ site.slug }}_Corp",
+            "rule": {
+                "name": "{{ site.name }} Corporate Endpoints",
+                "default": false,
+                "rank": 0,
+                "state": "enabled",
+                "condition": {
+                    "conditionType": "ConditionReference",
+                    "name": "{{ site.slug }}_Corp_Endpoint"
+                }
+            }
+        },
+        {
+            "profile": ["{{ site.slug }}_Contractor_Limited"],
+            "securityGroup": null,
+            "rule": {
+                "name": "{{ site.name }} Authenticated Others",
+                "default": false,
+                "rank": 1,
+                "state": "enabled",
+                "condition": {
+                    "conditionType": "ConditionReference",
+                    "name": "{{ site.slug }}_Auth_Passed"
+                }
+            }
+        },
+        {
+            "profile": ["{{ site.slug }}_Quarantine"],
+            "securityGroup": null,
+            "rule": {
+                "name": "{{ site.name }} Unknown Devices",
+                "default": false,
+                "rank": 2,
+                "state": "enabled",
+                "condition": {
+                    "conditionType": "ConditionReference",
+                    "name": "{{ site.slug }}_At_Site"
+                }
+            }
+        },
+        {
+            "profile": ["{{ site.slug }}_Deny"],
+            "securityGroup": null,
+            "rule": {
+                "name": "Default",
+                "default": true,
+                "rank": 3,
+                "state": "enabled",
+                "condition": null
+            }
+        }
+    ],
+    "exception": []
+}

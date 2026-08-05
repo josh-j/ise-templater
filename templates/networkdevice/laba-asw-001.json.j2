@@ -1,0 +1,28 @@
+{
+    "NetworkDevice": {
+        "NetworkDeviceGroupList": [
+            "IPSEC#Is IPSEC Device",
+            "Device Type#All Device Types",
+            "Location#All Locations",
+            "Ops Owner#All Ops Owners"
+        ],
+        "NetworkDeviceIPList": [
+            {
+                "ipaddress": "10.200.10.50",
+                "mask": 32
+            }
+        ],
+        "authenticationSettings": {
+            "dtlsRequired": false,
+            "enableKeyWrap": false,
+            "enableMultiSecret": "false",
+            "keyInputFormat": "ASCII",
+            "networkProtocol": "RADIUS",
+            "radiusSharedSecret": "{{ site_radius_secret_lab }}"
+        },
+        "coaPort": 1700,
+        "description": "CML access switch \u2014 802.1X/MAB NAD (P2/laba-nac)",
+        "name": "laba-asw-001",
+        "profileName": "Cisco"
+    }
+}

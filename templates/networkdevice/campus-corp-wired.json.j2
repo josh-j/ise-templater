@@ -1,0 +1,28 @@
+{
+    "NetworkDevice": {
+        "NetworkDeviceGroupList": [
+            "Location#All Locations#Datacenter",
+            "Device Type#All Device Types#WLC",
+            "Ops Owner#All Ops Owners#Security Team",
+            "IPSEC#Is IPSEC Device#No"
+        ],
+        "NetworkDeviceIPList": [
+            {
+                "ipaddress": "10.200.40.0",
+                "mask": 24
+            }
+        ],
+        "authenticationSettings": {
+            "dtlsRequired": false,
+            "enableKeyWrap": false,
+            "enableMultiSecret": "false",
+            "keyInputFormat": "ASCII",
+            "networkProtocol": "RADIUS",
+            "radiusSharedSecret": "{{ site_radius_secret_lab }}"
+        },
+        "coaPort": 1700,
+        "description": "Campus corp-wired lab workstations",
+        "name": "campus-corp-wired",
+        "profileName": "Cisco"
+    }
+}

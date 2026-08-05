@@ -1,0 +1,8 @@
+{
+    "DownloadableAcl": {
+        "name": "{{ site.slug }}_Contractor_DACL",
+        "description": "Contractor access at {{ site.name }}: local subnet plus DNS, nothing else",
+        "daclType": "IPV4",
+        "dacl": "permit udp any any eq 53\npermit tcp any {{ site.subnet }} 0.0.255.255\ndeny ip any any"
+    }
+}

@@ -1,0 +1,13 @@
+{
+    "AuthorizationProfile": {
+        "name": "{{ site.slug }}_Employee_Full",
+        "description": "Full corporate access at {{ site.name }}, VLAN {{ site.employee_vlan }}",
+        "accessType": "ACCESS_ACCEPT",
+        "authzProfileType": "SWITCH",
+        "profileName": "Cisco",
+        "vlan": {
+            "nameID": "{{ site.employee_vlan }}",
+            "tagID": 1
+        }
+    }
+}

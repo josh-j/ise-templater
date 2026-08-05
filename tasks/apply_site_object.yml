@@ -1,0 +1,10 @@
+---
+# Put one (template, site) pair in scope and hand it to the normal apply path.
+
+- name: Scope {{ pair.0 | basename }} to {{ pair.1.name }}
+  ansible.builtin.set_fact:
+    tmpl: "{{ pair.0 }}"
+    site: "{{ pair.1 }}"
+
+- name: Apply {{ pair.0 | basename }} for {{ pair.1.name }}
+  ansible.builtin.include_tasks: tasks/apply_object.yml

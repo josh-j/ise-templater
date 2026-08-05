@@ -1,0 +1,157 @@
+{
+    "authentication": [
+        {
+            "identitySourceName": "All_User_ID_Stores",
+            "ifAuthFail": "REJECT",
+            "ifProcessFail": "DROP",
+            "ifUserNotFound": "REJECT",
+            "rule": {
+                "condition": null,
+                "default": true,
+                "name": "Default",
+                "rank": 0,
+                "state": "enabled"
+            }
+        }
+    ],
+    "authorization": [
+        {
+            "profile": [
+                "Lab_Employee_Full"
+            ],
+            "rule": {
+                "condition": {
+                    "conditionType": "ConditionReference",
+                    "description": null,
+                    "isNegate": false,
+                    "name": "ISE_Employees_Group"
+                },
+                "default": false,
+                "name": "AD Employees Full",
+                "rank": 0,
+                "state": "enabled"
+            },
+            "securityGroup": null
+        },
+        {
+            "profile": [
+                "Lab_Contractor_Limited"
+            ],
+            "rule": {
+                "condition": {
+                    "conditionType": "ConditionReference",
+                    "description": null,
+                    "isNegate": false,
+                    "name": "ISE_Contractors_Group"
+                },
+                "default": false,
+                "name": "AD Contractors Limited",
+                "rank": 1,
+                "state": "enabled"
+            },
+            "securityGroup": null
+        },
+        {
+            "profile": [
+                "Lab_Quarantine"
+            ],
+            "rule": {
+                "condition": {
+                    "conditionType": "ConditionReference",
+                    "description": null,
+                    "isNegate": false,
+                    "name": "ISE_Workstations_Group"
+                },
+                "default": false,
+                "name": "AD Workstations Machine",
+                "rank": 2,
+                "state": "enabled"
+            },
+            "securityGroup": null
+        },
+        {
+            "profile": [
+                "Lab_Employee_Full"
+            ],
+            "rule": {
+                "condition": {
+                    "conditionType": "ConditionReference",
+                    "description": "Default condition used for basic Network Access requiring that authentication was successful.",
+                    "isNegate": false,
+                    "name": "Network_Access_Authentication_Passed"
+                },
+                "default": false,
+                "name": "Employee Full Access",
+                "rank": 3,
+                "state": "enabled"
+            },
+            "securityGroup": null
+        },
+        {
+            "profile": [
+                "Lab_Contractor_Limited"
+            ],
+            "rule": {
+                "condition": {
+                    "conditionType": "ConditionReference",
+                    "description": "Default condition for guest flow",
+                    "isNegate": false,
+                    "name": "Guest_Flow"
+                },
+                "default": false,
+                "name": "Contractor Limited",
+                "rank": 4,
+                "state": "enabled"
+            },
+            "securityGroup": null
+        },
+        {
+            "profile": [
+                "Lab_Quarantine"
+            ],
+            "rule": {
+                "condition": {
+                    "conditionType": "ConditionReference",
+                    "description": "Default condition for BYOD flow for any device that has passed the NSP process",
+                    "isNegate": false,
+                    "name": "EAP-TLS"
+                },
+                "default": false,
+                "name": "Quarantine Non Compliant",
+                "rank": 5,
+                "state": "enabled"
+            },
+            "securityGroup": null
+        },
+        {
+            "profile": [
+                "DenyAccess"
+            ],
+            "rule": {
+                "condition": null,
+                "default": true,
+                "name": "Default",
+                "rank": 6,
+                "state": "enabled"
+            },
+            "securityGroup": null
+        }
+    ],
+    "exception": [],
+    "name": "Lab Wired 802.1X",
+    "policySet": {
+        "condition": {
+            "conditionType": "ConditionReference",
+            "description": "A condition to match 802.1X based authentication requests from switches, according to the corresponding 802.1x attributes defined in the device profile.",
+            "isNegate": false,
+            "name": "Wired_802.1X"
+        },
+        "default": false,
+        "description": "ise-exporter3 lab realism",
+        "isProxy": false,
+        "name": "Lab Wired 802.1X",
+        "rank": 0,
+        "serviceName": "Default Network Access",
+        "state": "enabled"
+    }
+}

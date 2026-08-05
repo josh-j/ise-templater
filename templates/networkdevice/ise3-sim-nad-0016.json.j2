@@ -1,0 +1,28 @@
+{
+    "NetworkDevice": {
+        "NetworkDeviceGroupList": [
+            "Location#All Locations#Campus",
+            "Device Type#All Device Types#Switch",
+            "Ops Owner#All Ops Owners#Network Team",
+            "IPSEC#Is IPSEC Device#No"
+        ],
+        "NetworkDeviceIPList": [
+            {
+                "ipaddress": "10.99.0.16",
+                "mask": 32
+            }
+        ],
+        "authenticationSettings": {
+            "dtlsRequired": false,
+            "enableKeyWrap": false,
+            "enableMultiSecret": "false",
+            "keyInputFormat": "ASCII",
+            "networkProtocol": "RADIUS",
+            "radiusSharedSecret": "{{ site_radius_secret_sim }}"
+        },
+        "coaPort": 1700,
+        "description": "ise-exporter3 scale probe - safe to delete",
+        "name": "ise3-sim-nad-0016",
+        "profileName": "Cisco"
+    }
+}

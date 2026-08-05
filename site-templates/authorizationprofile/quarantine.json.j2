@@ -1,0 +1,10 @@
+{
+    "AuthorizationProfile": {
+        "name": "{{ site.slug }}_Quarantine",
+        "description": "Quarantine at {{ site.name }}: no VLAN change, DACL only",
+        "accessType": "ACCESS_ACCEPT",
+        "authzProfileType": "SWITCH",
+        "profileName": "Cisco",
+        "daclName": "{{ site.slug }}_Quarantine_DACL"
+    }
+}

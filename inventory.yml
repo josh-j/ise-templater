@@ -1,0 +1,23 @@
+---
+# Everything runs locally and talks to ISE over HTTPS, so `ansible_host` is
+# only ever used to build the ERS URL. `inventory_hostname` names the export
+# directory, so use the ISE node name -- not the Incus VM name, which differs
+# on the renamed nodes.
+all:
+  children:
+    # Where configuration is read from.
+    ise_source:
+      hosts:
+        labb-ise-001:
+          ansible_host: 10.200.30.10
+
+    # Where rendered templates are written to. Nothing else in the project
+    # writes to ISE, so this group is the entire blast radius.
+    ise_target:
+      hosts:
+        laba-ise-004:
+          ansible_host: 10.200.30.13
+
+    # Reachable, but not wired into either role by default:
+    #   labb-ise-002  10.200.30.11  ERS not answering as of 2026-08-04
+    #   laba-ise-003  10.200.30.12  CLI locked, admin API returns 401

@@ -1,0 +1,45 @@
+{
+    "SponsorGroup": {
+        "autoNotification": false,
+        "createPermissions": {
+            "canCreateRandomAccounts": true,
+            "canImportMultipleAccounts": true,
+            "canSetFutureStartDate": false,
+            "canSpecifyUsernamePrefix": true,
+            "importBatchSizeLimit": 200,
+            "randomBatchSizeLimit": 200,
+            "startDateFutureLimitDays": 1
+        },
+        "description": "Sponsors assigned to this group can manage only the guest accounts that they have created. By default, users in the OWN_ACCOUNTS user identity group are members of this sponsor group",
+        "guestTypes": [
+            "Daily (default)",
+            "Contractor (default)",
+            "Weekly (default)",
+            "SocialLogin (default)"
+        ],
+        "isDefaultGroup": true,
+        "isEnabled": true,
+        "locations": [
+            "San Jose"
+        ],
+        "managePermission": "OWNACCOUNTS",
+        "memberGroups": [
+            "OWN_ACCOUNTS (default)"
+        ],
+        "name": "OWN_ACCOUNTS (default)",
+        "otherPermissions": {
+            "canAccessViaRest": false,
+            "canApproveSelfregGuests": true,
+            "canDeleteGuestAccounts": true,
+            "canExtendGuestAccounts": true,
+            "canReinstateSuspendedAccounts": true,
+            "canResetGuestPasswords": true,
+            "canSendSmsNotifications": false,
+            "canSuspendGuestAccounts": true,
+            "canUpdateGuestContactInfo": true,
+            "canViewGuestPasswords": true,
+            "limitApprovalToSponsorsGuests": false,
+            "requireSuspensionReason": false
+        }
+    }
+}

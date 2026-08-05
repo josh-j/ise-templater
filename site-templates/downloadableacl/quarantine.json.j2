@@ -1,0 +1,8 @@
+{
+    "DownloadableAcl": {
+        "name": "{{ site.slug }}_Quarantine_DACL",
+        "description": "Quarantine at {{ site.name }}: DNS and DHCP only, nothing else",
+        "daclType": "IPV4",
+        "dacl": "permit udp any any eq 53\npermit udp any any eq 67\npermit udp any any eq 68\ndeny ip any any"
+    }
+}

@@ -1,0 +1,99 @@
+---
+# Create or update one already-rendered ERS object, matched by name.
+
+- name: Note the object name
+  ansible.builtin.set_fact:
+    obj_name: "{{ obj[res.root][res.name_key | default('name')] }}"
+    lookup_mode: "{{ res.lookup | default('name') }}"
+
+# The template names its parent; the appliance wants an id, and its own one.
+# `parentName` is not a field ISE knows, so the swap has to happen before the
+# body is sent, not alongside it.
+- name: Point {{ obj_name }} at the target's own parent id
+  ansible.builtin.set_fact:
+    obj: >-
+      {{ {res.root: (obj[res.root] | ise_swap_ref(ers_name_map,
+                                                  res.parent_ref.name_field,
+                                                  res.parent_ref.id_field))} }}
+  when: res.parent_ref is defined
+
+# Same idea, but resolved against other resources on the target: an egress
+# matrix cell names its SGTs and SGACLs, and each has to become this
+# appliance's id for that name.
+# A referenced name the collection listing did not carry -- the reserved SGT
+# "ANY" above all -- is resolved one at a time by name, the same way
+# templatize resolved it by id.
+- name: Resolve referenced names the listings omit
+  ansible.builtin.uri:
+    url: "{{ ise_ers_url }}/config/{{ item.resource }}/name/{{ item.id | urlencode }}"
+    status_code: [200, 404]
+  register: direct_names
+  check_mode: false
+  loop: "{{ obj[res.root] | ise_unresolved_refs(res.refs, ref_maps, true) }}"
+  loop_control:
+    label: "{{ item.resource }}/{{ item.id }}"
+  when: res.refs is defined
+
+- name: Fold them into the maps
+  ansible.builtin.set_fact:
+    ref_maps: >-
+      {{ ref_maps | combine({item.item.resource:
+           (ref_maps[item.item.resource] | default({}))
+           | combine({item.item.id: (item.json.values() | list | first).id}) },
+         recursive=True) }}
+  loop: "{{ direct_names.results | default([]) | selectattr('status', 'equalto', 200) | list }}"
+  loop_control:
+    label: "{{ item.item.resource }}/{{ item.item.id }}"
+
+- name: Point {{ obj_name }} at the target's own referenced ids
+  ansible.builtin.set_fact:
+    obj: "{{ {res.root: (obj[res.root] | ise_swap_refs(res.refs, ref_maps, false))} }}"
+  when: res.refs is defined
+
+# Get-by-name is exact and costs one request, so it is used wherever ISE
+# supports it. Where it answers 405 the catalog says `lookup: collection` and
+# apply_resource.yml has already indexed the collection by name.
+- name: Look up {{ obj_name }} by name
+  ansible.builtin.uri:
+    url: "{{ ise_ers_url }}/config/{{ res.resource }}/name/{{ obj_name | urlencode }}"
+    status_code: [200, 404]
+  register: by_name
+  check_mode: false
+  when: lookup_mode == 'name'
+
+- name: Resolve the existing id, if any
+  ansible.builtin.set_fact:
+    existing_id: >-
+      {{ (by_name.json[res.root].id if by_name.status == 200 else '')
+         if lookup_mode == 'name'
+         else (ers_name_map[obj_name] | default('', true)) }}
+
+- name: Report the intended change
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'CREATE' if existing_id == '' else 'UPDATE' }}
+      {{ res.resource }} {{ obj_name }}
+  when: ise_dry_run | bool
+
+- name: Create {{ obj_name }}
+  ansible.builtin.uri:
+    url: "{{ ise_ers_url }}/config/{{ res.resource }}"
+    method: POST
+    body_format: json
+    body: "{{ obj }}"
+    status_code: [201]
+  when:
+    - existing_id == ''
+    - not (ise_dry_run | bool)
+
+# ERS wants the id in the body as well as the URL on an update.
+- name: Update {{ obj_name }}
+  ansible.builtin.uri:
+    url: "{{ ise_ers_url }}/config/{{ res.resource }}/{{ existing_id }}"
+    method: PUT
+    body_format: json
+    body: "{{ obj | combine({res.root: {'id': existing_id}}, recursive=True) }}"
+    status_code: [200]
+  when:
+    - existing_id != ''
+    - not (ise_dry_run | bool)

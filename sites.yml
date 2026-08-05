@@ -1,0 +1,80 @@
+---
+# Sites to fan a template out across.
+#
+# A template under `site-templates/` is rendered once per entry here, with the
+# entry in scope as `site`. One file becomes N objects on the appliance, and
+# the object's identity comes from the *rendered* name -- so adding a site is
+# editing this file, not copying a template.
+#
+#     ansible-playbook apply.yml -e @sites.yml -e ise_dry_run=true
+#     ansible-playbook apply.yml -e @sites.yml
+#
+# ---------------------------------------------------------------------------
+# What a site builds, and what it assumes
+# ---------------------------------------------------------------------------
+#
+# Everything a site needs is created by these templates. Per site:
+#
+#   networkdevicegroup    Location#All Locations#<name>
+#   endpointgroup         <slug>_Corp_Devices
+#   sgt                   <slug>_Corp                     (value: sgt_value)
+#   condition             <slug>_At_Site                  DEVICE:Location
+#   condition             <slug>_Corp_Endpoint            IdentityGroup:Name
+#   downloadableacl       <slug>_Contractor_DACL
+#   downloadableacl       <slug>_Quarantine_DACL
+#   authorizationprofile  <slug>_Employee_Full            VLAN employee_vlan
+#   authorizationprofile  <slug>_Contractor_Limited       VLAN contractor_vlan + DACL
+#   authorizationprofile  <slug>_Quarantine               DACL
+#   policy-set            <name> Wired 802.1X             + 4 rules
+#
+# The ONLY things assumed to already exist are ISE built-ins, present on any
+# appliance out of the box:
+#
+#   condition             Wired_802.1X
+#   allowedprotocols      Default Network Access
+#   identity source       All_User_ID_Stores
+#   authorizationprofile  DenyAccess
+#
+# Nothing here depends on a lab artifact. In particular it does not use
+# `ISE_Employees_Group` or `ISE_Contractors_Group` -- those are AD external
+# group conditions built for this lab, and they need a `lab.local` join point,
+# which is an operation this tool cannot perform. Membership is decided by
+# endpoint identity group instead, which ERS can create.
+#
+# ---------------------------------------------------------------------------
+# Two things that will bite you
+# ---------------------------------------------------------------------------
+#
+# `location` is the network device group in the form a policy *condition*
+# wants, which is NOT the form the group is *named* in. The group is
+# `Location#All Locations#New York`; the condition takes
+# `All Locations#New York`. Both appear in
+# `/api/v1/policy/network-access/dictionaries/DEVICE/attribute/Location` as
+# `value` and `key`; sending the `value` is rejected with "Value for attribute
+# is not a permitted option".
+#
+# There is no rank here on purpose. ISE policy set ranks are a dense sequence
+# -- anything past the end is rejected ("Rank=99. Must be in range between 0
+# and 3"). Apply inserts each new set immediately above Default, so sites end
+# up ordered the way this list is ordered.
+#
+# `sgt_value` must be unique across the whole deployment, not just this file.
+
+ise_sites:
+  - name: New York
+    slug: NY
+    location_group: "Location#All Locations#New York"
+    location: "All Locations#New York"
+    employee_vlan: "110"
+    contractor_vlan: "111"
+    subnet: "10.110.0.0"
+    sgt_value: 310
+
+  - name: London
+    slug: LDN
+    location_group: "Location#All Locations#London"
+    location: "All Locations#London"
+    employee_vlan: "210"
+    contractor_vlan: "211"
+    subnet: "10.210.0.0"
+    sgt_value: 320

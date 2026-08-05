@@ -1,0 +1,18 @@
+{
+    "IdStoreSequence": {
+        "name": "{{ site.slug }}_ID_Sequence",
+        "description": "Identity store order for {{ site.name }}",
+        "breakOnStoreFail": false,
+        "certificateAuthenticationProfile": "Preloaded_Certificate_Profile",
+        "idSeqItem": [
+            {
+                "idstore": "Internal Users",
+                "order": 1
+            },
+            {
+                "idstore": "All_AD_Join_Points",
+                "order": 2
+            }
+        ]
+    }
+}

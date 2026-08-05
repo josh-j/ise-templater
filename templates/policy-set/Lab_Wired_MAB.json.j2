@@ -1,0 +1,49 @@
+{
+    "authentication": [
+        {
+            "identitySourceName": "All_User_ID_Stores",
+            "ifAuthFail": "REJECT",
+            "ifProcessFail": "DROP",
+            "ifUserNotFound": "REJECT",
+            "rule": {
+                "condition": null,
+                "default": true,
+                "name": "Default",
+                "rank": 0,
+                "state": "enabled"
+            }
+        }
+    ],
+    "authorization": [
+        {
+            "profile": [
+                "DenyAccess"
+            ],
+            "rule": {
+                "condition": null,
+                "default": true,
+                "name": "Default",
+                "rank": 0,
+                "state": "enabled"
+            },
+            "securityGroup": null
+        }
+    ],
+    "exception": [],
+    "name": "Lab Wired MAB",
+    "policySet": {
+        "condition": {
+            "conditionType": "ConditionReference",
+            "description": "A condition to match MAC Authentication Bypass service based authentication requests from switches, according to the corresponding MAB attributes defined in the device profile.",
+            "isNegate": false,
+            "name": "Wired_MAB"
+        },
+        "default": false,
+        "description": "ise-exporter3 lab realism",
+        "isProxy": false,
+        "name": "Lab Wired MAB",
+        "rank": 2,
+        "serviceName": "Default Network Access",
+        "state": "enabled"
+    }
+}
