@@ -3,7 +3,9 @@
 # scratch. Remove this line only if you have decided otherwise on purpose.
 exports/
 
-.direnv/
 *.retry
 
 __pycache__/
+
+# Local tooling scratch, not part of the project.
+.mem-vocab/
