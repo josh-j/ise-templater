@@ -1,23 +1,36 @@
 ---
-# Everything runs locally and talks to ISE over HTTPS, so `ansible_host` is
-# only ever used to build the ERS URL. `inventory_hostname` names the export
-# directory, so use the ISE node name -- not the Incus VM name, which differs
-# on the renamed nodes.
+# The appliances, and which end of the job each one is on.
+#
+# Two groups, and only two matter:
+#
+#   ise_source   read from. export.yml and templatize.yml run here.
+#   ise_target   written to. apply.yml and destroy.yml run here, and nothing
+#                else in this project writes to ISE at all -- so this group
+#                is the entire blast radius. Check it before an apply.
+#
+# To point this at your own appliances, change the names and addresses below.
+# `ansible_host` is the address; the name above it is what you will see in
+# the output and what names the export directory, so use the ISE node name.
+#
+# There is no SSH here. Ansible runs everything locally and talks to ISE over
+# HTTPS, so `ansible_host` is used for nothing but building the URL, and no
+# ansible_user / private key / port is needed.
+
 all:
   children:
-    # Where configuration is read from.
     ise_source:
       hosts:
         labb-ise-001:
           ansible_host: 10.200.30.10
 
-    # Where rendered templates are written to. Nothing else in the project
-    # writes to ISE, so this group is the entire blast radius.
     ise_target:
       hosts:
         laba-ise-004:
           ansible_host: 10.200.30.13
 
-    # Reachable, but not wired into either role by default:
-    #   labb-ise-002  10.200.30.11  ERS not answering as of 2026-08-04
-    #   laba-ise-003  10.200.30.12  CLI locked, admin API returns 401
+    # Two more appliances exist and are deliberately not wired in:
+    #   labb-ise-002  10.200.30.11  ERS was not answering as of 2026-08-04
+    #   laba-ise-003  10.200.30.12  CLI locked, the admin API returns 401
+    #
+    # Add a host to a group by copying one of the two-line blocks above.
+    # `./ise check` will tell you whether a new one answers.

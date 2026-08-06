@@ -46,7 +46,9 @@
     patterns: "*.json.j2"
     file_type: file
   register: found_site
-  when: ise_sites | default([]) | length > 0
+  when:
+    - ise_sites | default([]) | length > 0
+    - (site_template_dir ~ '/' ~ res.resource) is exists
 
 - name: "{{ res.resource }}: destroy each site object"
   ansible.builtin.include_tasks: tasks/destroy_site_object.yml
@@ -63,13 +65,15 @@
     patterns: "*.json.j2"
     file_type: file
   register: found
-  when: not (ise_site_only | bool)
+  when:
+    - not (ise_site_only | bool)
+    - (template_dir ~ '/' ~ res.resource) is exists
 
 - name: "{{ res.resource }}: destroy each exported object"
   ansible.builtin.include_tasks: tasks/destroy_object.yml
   loop: >-
     {{ [] if ise_site_only | bool
-       else found.files | map(attribute='path') | sort | list }}
+       else found.files | default([]) | map(attribute='path') | sort | list }}
   loop_control:
     loop_var: tmpl
     label: "{{ tmpl | basename }}"

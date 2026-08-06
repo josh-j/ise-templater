@@ -1,16 +1,19 @@
-# Raw exports carry live values -- RADIUS shared secrets among them -- in
-# cleartext. Templates are the artefact meant to be committed; exports are
-# scratch. Remove this line only if you have decided otherwise on purpose.
+# Anything that holds a secret, and anything a run produces.
+
+# The ISE admin password. credentials.example.yml is the committed template;
+# credentials.yml never is, ansible-vault encrypted or not. Leading slash so
+# this only ever means the one in the project root.
+/credentials.yml
+/.vault-pass
+/.env
+
+# Raw exports carry live values -- RADIUS shared secrets, repository
+# credentials, internal user records -- in cleartext. Templates are the
+# artefact meant to be committed; exports are scratch. Remove this line only
+# if you have decided otherwise on purpose.
 exports/
 
-# The admin password lives here. credentials.example.yml is the committed
-# one; credentials.yml never is, encrypted with ansible-vault or not.
-credentials.yml
-.vault-pass
-.env
-
 *.retry
-
 __pycache__/
 
 # uv.lock is committed; the environment it builds is not.

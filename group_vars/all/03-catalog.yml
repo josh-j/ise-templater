@@ -1,123 +1,53 @@
 ---
-# No SSH anywhere: every task is a local HTTPS call to an ISE API.
-ansible_connection: local
-ansible_python_interpreter: "{{ ansible_playbook_python }}"
-
-# --- connection ------------------------------------------------------------
-
-ise_user: admin
-# ISE serves configuration on two different APIs on two different ports.
-# ERS is the older one and wraps everything in SearchResult; OpenAPI is where
-# anything added since roughly ISE 2.6 lives, policy sets included.
-ise_ers_port: 9060
-ise_ers_url: "https://{{ ansible_host }}:{{ ise_ers_port }}/ers"
-ise_api_url: "https://{{ ansible_host }}"
-ise_validate_certs: false     # the lab appliances are self-signed
-ise_page_size: 100            # ERS caps a page at 100 regardless of what you ask
-# OpenAPI is different: it pages too, but silently defaults to 100 and honours
-# a larger `size` -- up to a point, since size=5000 is rejected outright. 500
-# is comfortably inside that and keeps most collections to one request.
-ise_api_page_size: 500
-ise_api_max_pages: 20
-ise_timeout: 60
-
-# The GUI/ERS/OpenAPI password, which is a different password from the CLI
-# one. Resolution order, first hit wins:
+# The catalog: every resource this project knows how to move, in apply order.
 #
-#   1. -e ise_password=... on the command line
-#   2. credentials.yml, if the file exists -- see credentials.example.yml
-#   3. ISE_PASSWORD in the environment
-#   4. the sops store, and only when ise_password_sops is true
+# List order is apply order, and it matters -- groups and conditions have to
+# exist before the objects that reference them. Export and templatize walk it
+# forwards, destroy walks it backwards.
 #
-# Steps 1 and 2 do not appear below because they do not need to: extra vars
-# and the include_vars in tasks/load_credentials.yml both outrank this file,
-# so a value from either simply replaces what is computed here.
+# Adding a resource is adding an entry here. Nothing else changes.
 #
-# sops is off by default because it is a separately installed Go binary and
-# because the store below is one particular machine's, not something a fresh
-# checkout can read. `-e ise_password_sops=true` turns it back on.
+# Keys, all optional except `resource`:
 #
-# The branch is an inline if/else rather than `| default(..., true)` on
-# purpose: Jinja evaluates filter arguments eagerly, so the `default` form ran
-# sops on every task even when ISE_PASSWORD was already set -- once per URI
-# call, hundreds of times in a full run. An if/else is lazy.
-# Where tasks/load_credentials.yml looks. Point it somewhere else with
-# `-e ise_credentials_file=/path/to/other.yml` to keep several appliances'
-# credentials side by side.
-ise_credentials_file: "{{ playbook_dir }}/credentials.yml"
-
-ise_password_sops: false
-sops_file: /srv/nix-config/secrets/common.yaml
-sops_key: lab_ise_ui_admin_pw
-sops_cmd: "sops -d --extract '[\"{{ sops_key }}\"]' {{ sops_file }}"
-ise_password: >-
-  {{ lookup('env', 'ISE_PASSWORD') if lookup('env', 'ISE_PASSWORD')
-     else (lookup('pipe', sops_cmd) if ise_password_sops | bool else '') }}
-
-# --- which families are collected at all ------------------------------------
-#
-# Every catalog entry carries a `group`. A group switched off here is skipped
-# by export, templatize, apply and destroy alike, as if it were not in the
-# catalog. Turn one on for a run with `-e ise_group_portals=true`, or edit
-# this map to change the default.
-#
-# The defaults are about signal, not capability: portals are large nested
-# blobs with per-node URLs baked in, runtime is session data that changes by
-# the second, and lifecycle belongs to iselab rather than to a config
-# template. All three are modelled and all three are one flag away.
-
-ise_group_core: "{{ ise_group_core_override | default(true) }}"
-ise_group_trustsec: "{{ ise_group_trustsec_override | default(true) }}"
-ise_group_deviceadmin: "{{ ise_group_deviceadmin_override | default(true) }}"
-ise_group_identity: "{{ ise_group_identity_override | default(true) }}"
-ise_group_guest: "{{ ise_group_guest_override | default(true) }}"
-ise_group_integration: "{{ ise_group_integration_override | default(true) }}"
-ise_group_portals: "{{ ise_group_portals_override | default(false) }}"
-ise_group_runtime: "{{ ise_group_runtime_override | default(false) }}"
-ise_group_lifecycle: "{{ ise_group_lifecycle_override | default(false) }}"
-
-ise_groups_enabled: >-
-  {{ dict([['core', ise_group_core | bool],
-           ['trustsec', ise_group_trustsec | bool],
-           ['deviceadmin', ise_group_deviceadmin | bool],
-           ['identity', ise_group_identity | bool],
-           ['guest', ise_group_guest | bool],
-           ['integration', ise_group_integration | bool],
-           ['portals', ise_group_portals | bool],
-           ['runtime', ise_group_runtime | bool],
-           ['lifecycle', ise_group_lifecycle | bool]]) }}
-
-# --- what is managed -------------------------------------------------------
-#
-# Apply order is list order: groups and conditions before the things that
-# reference them.
-#
-#   api        ers (default) | openapi
-#   root       ERS wrapper key. Not derivable from the path -- endpointgroup
+#   resource   the name you type: `./ise export -e resources=sgt`
+#   group      which family it belongs to, for the switches in 02-families.yml
+#   api        ers (the default) or openapi
+#   root       the ERS wrapper key. Not derivable from the path: endpointgroup
 #              returns EndPointGroup, activedirectory returns ERSActiveDirectory
-#   path       OpenAPI path. Ignored for ERS
-#   mode       full (default) -- export, templatize, apply
-#              config         -- export only, kept as a record of the appliance
+#   path       the OpenAPI path. Ignored for ERS resources
+#   mode       full (the default) -- export, templatize and apply it
+#              config            -- export only, as a record of the appliance
 #   detail     false when ERS has no GET-by-id and the listing is all there is
-#   name_key   the field holding the object name, when it is not `name`
-#   strip      extra server-owned fields, on top of ise_strip_keys
+#   name_key   the field holding the object's name, when it is not `name`.
+#              May be dotted: `rule.name`
+#   strip      extra server-owned fields to drop, on top of ise_strip_keys
 #   lookup     how apply finds an existing object on the target
-#              name (default) -- GET .../name/<name>, exact, one request
-#              collection     -- read the collection once and match in memory,
-#                                for the resources with no GET-by-name. Do not
-#                                reach for `?filter=name.EQ.` instead: guesttype
-#                                and sponsorgroup accept it, ignore it, and
-#                                return everything
-#   singleton  OpenAPI endpoint returning one object rather than a collection
-#   children   OpenAPI sub-collections fetched per parent and kept in one doc
-
+#              name (the default) -- GET .../name/<name>, exact, one request
+#              collection         -- read the whole collection once and match
+#                                    in memory, for resources with no
+#                                    GET-by-name. Do not reach for
+#                                    `?filter=name.EQ.` instead: guesttype and
+#                                    sponsorgroup accept it, ignore it, and
+#                                    return everything
+#   singleton  an OpenAPI endpoint returning one object rather than a list
+#   optional   tolerate a 4xx/5xx: the resource may not exist on this version
+#   children   OpenAPI sub-collections fetched per parent, kept in one document
+#   parent_ref an id reference to this resource's own objects
+#   refs       id references to other resources
+#   templatize_skip  a field/value marking objects not worth templating
+#
+# None of these are guesswork. Each is here because an appliance behaved that
+# way and a run failed until it was declared -- docs/ise-api-notes.md has the
+# stories. docs/catalog.md is the same list as prose, if you would rather read
+# it that way.
 ise_catalog:
 
   # --- groups and tags: nothing here references anything ---
   - resource: networkdevicegroup
-    root: NetworkDeviceGroup
     group: core
+    root: NetworkDeviceGroup
   - resource: endpointgroup
+    group: core
     root: EndPointGroup
     strip: [systemDefined]      # ISE decides this, and rejects being told
     # Every endpoint group in this deployment is a Cisco built-in, present
@@ -134,23 +64,23 @@ ise_catalog:
     parent_ref:
       id_field: parentId
       name_field: parentName
-    group: core
   - resource: identitygroup
+    group: core
     root: IdentityGroup
     mode: config                # ERS serves identity groups read-only
 
   # --- TrustSec ---
-    group: core
   - resource: sgt
+    group: trustsec
     root: Sgt
     strip: [generationId]       # bumped by ISE on every write
-    group: trustsec
   - resource: sgacl
+    group: trustsec
     root: Sgacl
     strip: [generationId]
     lookup: collection          # sgacl answers 405 to GET .../name/<name>
-    group: trustsec
   - resource: sxpvpns
+    group: trustsec
     root: ERSSxpVpn
     name_key: sxpVpnName        # no `name` field at all, and none in the listing
     mode: config                # and so nothing to match an object on: the
@@ -162,8 +92,8 @@ ise_catalog:
   # sourceSgtId, destinationSgtId and an sgacls list. `refs` rewrites all
   # three to names on the way into a template and back to the target's own
   # ids on the way out -- see ise_swap_refs.
-    group: trustsec
   - resource: egressmatrixcell
+    group: trustsec
     root: EgressMatrixCell
     lookup: collection          # cells are named ANY-ANY etc; no GET-by-name
     # ANY-ANY is the matrix catch-all, present on every appliance. GET returns
@@ -189,156 +119,155 @@ ise_catalog:
   # --- TrustSec beyond the SGT/SGACL axes ---
   # Virtual networks, the SGT-to-VN-to-VLAN model, IP-to-SGT mappings, SXP
   # peering and the reserved SGT range. All empty in this lab except nbarapp.
-    group: trustsec
   - resource: trustsec-virtualnetwork
+    group: trustsec
     api: openapi
     path: /api/v1/trustsec/virtualnetwork
-    group: trustsec
   - resource: trustsec-nbarapp
+    group: trustsec
     api: openapi
     path: /api/v1/trustsec/sgacl/nbarapp
-    group: trustsec
   - resource: sgt-reservation
+    group: trustsec
     api: openapi
     path: /api/v1/sgt/reservation
     optional: true              # 3.5 only; 404 on 3.3 P11
-    group: trustsec
   - resource: sgtvnvlan
+    group: trustsec
     root: SgtVNVlanContainer
-    group: trustsec
   - resource: sgmapping
+    group: trustsec
     root: SGMapping
-    group: trustsec
   - resource: sgmappinggroup
+    group: trustsec
     root: SGMappingGroup
-    group: trustsec
   - resource: sxpconnections
+    group: trustsec
     root: ERSSxpConnection
-    group: trustsec
   - resource: sxplocalbindings
-    root: ERSSxpLocalBindings
     group: trustsec
+    root: ERSSxpLocalBindings
 
   # --- profiling and onboarding ---
   - resource: filterpolicy
+    group: core
     root: ERSFilterPolicy
-    group: core
   - resource: nspprofile
+    group: core
     root: ERSNSPProfile
-    group: core
   - resource: certificatetemplate
-    root: ERSCertificateTemplate
     group: core
+    root: ERSCertificateTemplate
   - resource: endpoint-custom-attribute
+    group: core
     api: openapi
     path: /api/v1/endpoint-custom-attribute
-    group: core
   - resource: dictionaries
+    group: core
     api: openapi
     path: /api/v1/policy/network-access/dictionaries
-    group: core
 
   # --- integrations ---
   - resource: pxgridsettings
-    root: PxgridSettings
     group: integration
+    root: PxgridSettings
   - resource: pxgrid-direct-connector
+    group: integration
     api: openapi
     path: /api/v1/pxgrid-direct/connector-config
-    group: integration
   - resource: acibindings
-    root: AciBindings
     group: integration
+    root: AciBindings
   - resource: ipsec
+    group: integration
     api: openapi
     path: /api/v1/ipsec
     optional: true              # 404 until an IPsec node exists
-    group: integration
   - resource: integration-catalog
+    group: integration
     api: openapi
     path: /api/v1/integration-catalog/applications
     singleton: true
     mode: config
-    group: integration
   - resource: dataconnect-settings
+    group: integration
     api: openapi
     path: /api/v1/mnt/data-connect/settings
     singleton: true
     mode: config
-    group: integration
   - resource: smsprovider
+    group: integration
     root: ERSSmsProvider
     detail: false               # no GET-by-id
     mode: config
-    group: integration
 
   # --- guest ---
   - resource: guestssid
-    root: GuestSSID
     group: guest
+    root: GuestSSID
   - resource: guestsmtpnotificationsettings
+    group: guest
     root: ERSGuestSmtpNotificationSettings
     name_key: id                # one settings record, and it has no name field
     mode: config
-    group: guest
   - resource: sponsorgroupmember
+    group: guest
     root: ERSSponsorGroupMember
     detail: false               # no GET-by-id
     mode: config
-    group: guest
 
   # --- portals: off by default (ise_group_portals) ---
   # Large nested objects with per-node URLs and customisation baked in. They
   # template, but porting one needs a lot of tokens.
   - resource: portal
-    root: ERSPortal
     group: portals
+    root: ERSPortal
     mode: config                # a read-only view of the typed portals below
   - resource: portaltheme
+    group: portals
     root: PortalTheme
-    group: portals
   - resource: portalglobalsetting
+    group: portals
     root: PortalCustomizationGlobalSetting
-    group: portals
   - resource: hotspotportal
+    group: portals
     root: HotspotPortal
-    group: portals
   - resource: selfregportal
+    group: portals
     root: SelfRegPortal
-    group: portals
   - resource: sponsorportal
+    group: portals
     root: SponsorPortal
-    group: portals
   - resource: sponsoredguestportal
+    group: portals
     root: SponsoredGuestPortal
-    group: portals
   - resource: mydeviceportal
+    group: portals
     root: MyDevicePortal
-    group: portals
   - resource: byodportal
-    root: BYODPortal
     group: portals
+    root: BYODPortal
 
   # --- runtime and lifecycle: off by default ---
   - resource: endpoint
+    group: runtime
     root: ERSEndPoint
     mode: config
-    group: runtime
   - resource: sessionservicenode
+    group: lifecycle
     root: SessionServiceNode
     mode: config
-    group: lifecycle
   - resource: deployment-node-group
+    group: lifecycle
     api: openapi
     path: /api/v1/deployment/node-group
     mode: config
-    group: lifecycle
   - resource: trusted-certificate
+    group: lifecycle
     api: openapi
     path: /api/v1/certs/trusted-certificate
     name_key: friendlyName
     mode: config
-    group: lifecycle
 
   # --- the profiles everything else is described in terms of ---
   # How a NAD speaks RADIUS -- CoA type, VLAN/dACL attribute mapping, redirect
@@ -349,10 +278,11 @@ ise_catalog:
   # they hold, and ignore `size`. export_ers.yml always fetches page one for
   # that reason.
   - resource: networkdeviceprofile
+    group: core
     root: NetworkDeviceProfile
     mode: config                # read-only over ERS -- see below
-    group: core
   - resource: certificateprofile
+    group: core
     root: CertificateProfile
     templatize_skip:            # the only one present ships with ISE
       field: name
@@ -364,8 +294,8 @@ ise_catalog:
   # "Value for attribute is not a permitted option". So a site's location
   # group has to exist before a condition can match on it, and this entry
   # cannot move back above networkdevicegroup and endpointgroup.
-    group: core
   - resource: condition
+    group: core
     api: openapi
     path: /api/v1/policy/network-access/condition
   # /api/v1/policy/device-admin/condition is deliberately absent: it returns a
@@ -376,35 +306,35 @@ ise_catalog:
   # or device ports, and named time/date windows. Both services keep their
   # own, and both are empty in this lab -- so, like the RADIUS proxy
   # resources, they template but are unproven against real data.
-    group: core
   - resource: network-condition
+    group: core
     api: openapi
     path: /api/v1/policy/network-access/network-condition
-    group: core
   - resource: time-condition
+    group: core
     api: openapi
     path: /api/v1/policy/network-access/time-condition
-    group: core
   - resource: device-admin-network-condition
+    group: deviceadmin
     api: openapi
     path: /api/v1/policy/device-admin/network-condition
-    group: deviceadmin
   - resource: device-admin-time-condition
+    group: deviceadmin
     api: openapi
     path: /api/v1/policy/device-admin/time-condition
 
   # --- authentication and authorization building blocks ---
-    group: deviceadmin
   - resource: allowedprotocols
+    group: core
     root: AllowedProtocols
-    group: core
   - resource: idstoresequence
-    root: IdStoreSequence
     group: identity
+    root: IdStoreSequence
   - resource: downloadableacl
-    root: DownloadableAcl
     group: core
+    root: DownloadableAcl
   - resource: authorizationprofile
+    group: core
     root: AuthorizationProfile
 
   # --- external identity and RADIUS/TACACS proxying ---
@@ -412,80 +342,80 @@ ise_catalog:
   # pass: an empty collection looks identical to an absent one unless you go
   # looking. Their wrapper keys come from Cisco's own SDK model names rather
   # than from a live object, and are unverified against real data here.
-    group: core
   - resource: ldap
+    group: identity
     root: ERSLdap
-    group: identity
   - resource: restidstore
+    group: identity
     root: ERSRestIDStore
-    group: identity
   - resource: externalradiusserver
+    group: identity
     root: ExternalRadiusServer
-    group: identity
   - resource: radiusserversequence
+    group: identity
     root: RadiusServerSequence
-    group: identity
   - resource: tacacsexternalservers
-    root: TacacsExternalServer
     group: identity
+    root: TacacsExternalServer
   - resource: tacacsserversequence
+    group: identity
     root: TacacsServerSequence
 
   # --- device admin (TACACS+) ---
-    group: identity
   - resource: tacacsprofile
-    root: TacacsProfile
     group: deviceadmin
+    root: TacacsProfile
   - resource: tacacscommandsets
+    group: deviceadmin
     root: TacacsCommandSets
 
   # --- Adaptive Network Control ---
   # ancpolicy is configuration. ancendpoint is a live quarantine assignment --
   # runtime state, so captured rather than applied.
-    group: deviceadmin
   - resource: ancpolicy
-    root: ErsAncPolicy
     group: integration
+    root: ErsAncPolicy
   - resource: ancendpoint
+    group: integration
     root: ErsAncEndpoint
     mode: config
 
   # --- guest ---
-    group: integration
   - resource: guesttype
+    group: guest
     root: GuestType
     lookup: collection
-    group: guest
   - resource: guestlocation
+    group: guest
     root: GuestLocation
     detail: false               # no GET-by-id; the listing is the whole object
     lookup: collection
-    group: guest
   - resource: sponsorgroup
+    group: guest
     root: SponsorGroup
     lookup: collection
 
   # --- profiling ---
-    group: guest
   - resource: profilerprofile
+    group: core
     root: ProfilerProfile
     lookup: collection
 
   # --- network devices, last: they reference the groups above ---
-    group: core
   - resource: networkdevice
+    group: core
     root: NetworkDevice
 
   # --- policy sets, with their rules in the same document ---
-    group: core
   - resource: policy-set
+    group: core
     api: openapi
     path: /api/v1/policy/network-access/policy-set
     children: [authentication, authorization, exception]
     strip: [hitCounts]          # runtime counters. `rank` is kept: rule order
                                 # is a decision an admin made, not server state
-    group: core
   - resource: device-admin-policy-set
+    group: deviceadmin
     api: openapi
     path: /api/v1/policy/device-admin/policy-set
     children: [authentication, authorization, exception]
@@ -495,14 +425,14 @@ ise_catalog:
   # last to apply -- after the profiles and conditions they name exist. Unlike
   # a policy set these are a bare rule list at a fixed path, and a rule keeps
   # its name one level down, hence the dotted name_key.
-    group: deviceadmin
   - resource: global-exception
+    group: core
     api: openapi
     path: /api/v1/policy/network-access/policy-set/global-exception
     name_key: rule.name
     strip: [hitCounts]
-    group: core
   - resource: device-admin-global-exception
+    group: deviceadmin
     api: openapi
     path: /api/v1/policy/device-admin/policy-set/global-exception
     name_key: rule.name
@@ -511,24 +441,24 @@ ise_catalog:
   # --- captured, never applied ---------------------------------------------
   # These export so you have a record of the appliance, but they are not
   # templated and not written anywhere. Each for its own reason.
-    group: deviceadmin
   - resource: internaluser
+    group: identity
     root: InternalUser
     mode: config                # password state cannot round-trip an export
-    group: identity
   - resource: adminuser
+    group: identity
     root: AdminUser
     mode: config                # same, and these are admin credentials
-    group: identity
   - resource: activedirectory
+    group: identity
     root: ERSActiveDirectory
     mode: config                # a join point is an operation, not a document
-    group: identity
   - resource: node
-    root: Node
-    mode: config                # deployment membership; belongs to iselab
     group: lifecycle
+    root: Node
+    mode: config                # deployment membership, not portable config
   - resource: repository
+    group: lifecycle
     api: openapi
     path: /api/v1/repository
     name_key: name
@@ -540,14 +470,13 @@ ise_catalog:
   # in any version from 3.1.0 to 3.5.0 -- while certificate_profile is there
   # with a create method, exactly matching what this lab does and does not
   # accept. The endpoint parses a POST and argues about fields, which makes it
-  # look supported; it never completes one. See the README.
-    group: lifecycle
+  # look supported; it never completes one. See docs/ise-api-notes.md.
   - resource: system-settings-proxy
+    group: lifecycle
     api: openapi
     path: /api/v1/system-settings/proxy
     singleton: true
     mode: config
-    group: lifecycle
 
 # Reference kinds the preflight reports but will not fail on. Empty: every
 # kind a policy set can name now has an authoritative endpoint to check it
@@ -555,35 +484,5 @@ ise_catalog:
 # internal store, an AD join point or a sequence, and no ERS resource answers
 # for all three, but /api/v1/policy/network-access/identity-stores lists
 # exactly that union and preflight uses it.
+
 preflight_advisory: []
-
-# Server-owned fields, stripped recursively on the way into a template: they
-# describe where an object lives, not what it is, and a target mints its own.
-ise_strip_keys:
-  - id
-  - link
-
-# --- templating ------------------------------------------------------------
-
-# Values that differ between deployments. Each entry rewrites a literal in the
-# exported JSON into a Jinja reference; `apply` resolves it from the site
-# variables below. `regexp` is a regular expression, so escape dots you mean
-# literally. `!unsafe` stops Ansible from expanding the replacement here --
-# the braces have to survive into the .j2 file.
-ise_tokens:
-  - regexp: 'ise3simprobe'
-    replace: !unsafe '{{ site_radius_secret_sim }}'
-  - regexp: 'labradius'
-    replace: !unsafe '{{ site_radius_secret_lab }}'
-  - regexp: 'cisco123'
-    replace: !unsafe '{{ site_radius_secret_cml }}'
-
-# --- site values -----------------------------------------------------------
-# What the tokens above resolve to at apply time. Override per run with
-# `-e site_radius_secret_lab=...`, or move them into group_vars/ise_target.yml.
-# The defaults reproduce the source exactly, so an untouched round trip is a
-# no-op rather than a surprise.
-
-site_radius_secret_sim: ise3simprobe
-site_radius_secret_lab: labradius
-site_radius_secret_cml: cisco123

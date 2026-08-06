@@ -211,6 +211,18 @@ def ise_unresolved_refs(obj, refs, maps, by_name=False):
     return missing
 
 
+def _truthy(value):
+    """Is this on? Tolerates the strings the command line produces.
+
+    `-e ise_group_portals=true` arrives as the string "true", and "false"
+    arrives as a string that is perfectly truthy in Python. Anything not
+    recognisably off counts as on.
+    """
+    if isinstance(value, str):
+        return value.strip().lower() not in ("false", "no", "off", "0", "")
+    return bool(value)
+
+
 def ise_enabled_groups(catalog, groups):
     """Catalog entries whose `group` is switched on, in catalog order.
 
@@ -219,7 +231,7 @@ def ise_enabled_groups(catalog, groups):
     """
     return [
         e for e in catalog
-        if "group" not in e or (groups or {}).get(e["group"], True)
+        if "group" not in e or _truthy((groups or {}).get(e["group"], True))
     ]
 
 

@@ -1,20 +1,31 @@
 #!/usr/bin/env sh
-# One entry point for the four playbooks, so the flag combinations that matter
-# -- a dry run, the sites file, the two switches destroy.yml insists on -- are
-# names rather than something to remember. Anything it does not recognise is
-# handed to ansible-playbook untouched, so `./ise export -e resources=sgt`
-# works the way it reads.
+# One entry point for the playbooks, so the flag combinations that matter -- a
+# dry run, the sites file, the two switches destroy.yml insists on -- are names
+# rather than something to remember. Anything it does not recognise is handed
+# to ansible-playbook untouched, so `./ise export -e resources=sgt` works the
+# way it reads.
+#
+# You do not need to know Ansible to use this. docs/ansible-for-newcomers.md
+# is there for when you want to.
 #
 #   ./ise help
 set -eu
 
 cd "$(dirname "$0")"
 
+FAMILIES="core trustsec deviceadmin identity guest integration portals runtime lifecycle"
+
 # --- how to run ansible ----------------------------------------------------
-# uv first, since it is what pyproject.toml/uv.lock are for and it syncs the
-# environment on the way past. A .venv from the plain-pip route is next, and a
-# system-wide ansible-playbook last.
+# uv first, since it is what pyproject.toml and uv.lock are for and it brings
+# the environment up to date on the way past. A .venv from the plain-pip route
+# is next, and a system-wide ansible-playbook last.
 if command -v uv >/dev/null 2>&1 && [ -f pyproject.toml ]; then
+  # Verify TLS against the operating system's certificate store, so a network
+  # that inspects TLS works without further ceremony. pyproject.toml sets the
+  # same thing; this covers running uv from anywhere else too. On uv older
+  # than 0.10 the spelling is UV_NATIVE_TLS=1, which this leaves alone.
+  UV_SYSTEM_CERTS=${UV_SYSTEM_CERTS:-1}
+  export UV_SYSTEM_CERTS
   RUN="uv run --"
 elif [ -x .venv/bin/ansible-playbook ]; then
   PATH="$PWD/.venv/bin:$PATH"
@@ -23,18 +34,18 @@ elif [ -x .venv/bin/ansible-playbook ]; then
 elif command -v ansible-playbook >/dev/null 2>&1; then
   RUN=""
 else
-  echo "ise: no ansible-playbook. Run './ise setup' first." >&2
+  echo "ise: no ansible-playbook found. Run './ise setup' first." >&2
   exit 1
 fi
 
-# --- vault ------------------------------------------------------------------
+# --- vault -----------------------------------------------------------------
 # credentials.yml may be an ansible-vault file. If it is, supply the password
 # from .vault-pass when that exists and prompt when it does not -- unless the
 # caller is already passing vault options of their own.
 vault_args() {
   [ -f credentials.yml ] || return 0
   head -c 14 credentials.yml 2>/dev/null | grep -q '^\$ANSIBLE_VAULT' || return 0
-  case " $* " in *" --vault"*|*" --ask-vault"*) return 0 ;; esac
+  case " $* " in *" --vault"* | *" --ask-vault"*) return 0 ;; esac
   if [ -f .vault-pass ]; then
     echo "--vault-password-file .vault-pass"
   else
@@ -57,36 +68,73 @@ usage() {
 Usage: ./ise <command> [options]
 
   setup                install dependencies, create credentials.yml
-  check                confirm every node answers on both APIs
-  export               read config from ise_source into exports/
+  check                confirm every appliance answers on both APIs
+  export               read configuration from ise_source into exports/
   templatize           turn exports/ into templates/
   apply [--dry]        push templates/ at ise_target
   sites [FILE] [--dry] push the site fan-out (default sites.yml)
   destroy [FILE] [--force]
-                       remove what the site templates created; dry unless
-                       --force, which is the flag that actually writes
+                       remove what the site templates created. Shows what it
+                       would delete unless you add --force
   lint                 ansible-lint over the playbooks
   help
+
+Options any command takes:
+
+  --with FAMILY[,FAMILY]     include families that are off by default
+  --without FAMILY[,FAMILY]  leave families out for this run
+
+    core  trustsec  deviceadmin  identity  guest
+    integration  portals  runtime  lifecycle
 
 Anything else on the line goes to ansible-playbook as-is:
 
   ./ise export -e resources=networkdevicegroup,networkdevice
   ./ise apply --dry -e resources=policy-set
   ./ise check --limit ise_target
+  ./ise export --with portals
 
-Credentials come from credentials.yml (see credentials.example.yml), or from
-ISE_PASSWORD in the environment. './ise setup' creates the first one for you.
+A first run, in order:
+
+  ./ise setup          then put the password in credentials.yml
+  ./ise check
+  ./ise export
+  ./ise templatize
+  ./ise apply --dry
 EOF
 }
 
 cmd=${1:-help}
 [ $# -gt 0 ] && shift
 
-# --dry / --force are ours; everything else is pushed back for ansible. The
-# countdown is what keeps pushed-back arguments from being re-read.
+# --dry, --force, --with and --without are ours; everything else is pushed
+# back for ansible. The countdown is what stops pushed-back arguments from
+# being read a second time.
 dry=0
 force=0
 sites_file=""
+families=""
+
+add_families() { # add_families <list> <true|false>
+  for name in $(echo "$1" | tr ',' ' '); do
+    case " $FAMILIES " in
+      *" $name "*) families="$families -e ise_group_$name=$2" ;;
+      *)
+        echo "ise: no such family: $name" >&2
+        echo "ise: pick from: $FAMILIES" >&2
+        exit 1
+        ;;
+    esac
+  done
+}
+
+need_value() { # need_value <flag> <how many arguments are left>
+  [ "$2" -gt 0 ] || {
+    echo "ise: $1 needs a comma-separated family list" >&2
+    exit 1
+  }
+}
+
 n=$#
 while [ "$n" -gt 0 ]; do
   a=$1
@@ -95,6 +143,18 @@ while [ "$n" -gt 0 ]; do
   case $a in
     --dry | -n) dry=1 ;;
     --force | -f) force=1 ;;
+    --with)
+      need_value "$a" "$n"
+      add_families "$1" true
+      shift
+      n=$((n - 1))
+      ;;
+    --without)
+      need_value "$a" "$n"
+      add_families "$1" false
+      shift
+      n=$((n - 1))
+      ;;
     *.yml | *.yaml)
       # A bare file argument to sites/destroy is the sites file; anywhere else
       # it is an ansible argument and gets pushed back like the rest.
@@ -107,6 +167,9 @@ while [ "$n" -gt 0 ]; do
   esac
 done
 
+# shellcheck disable=SC2086
+set -- $families "$@"
+
 case $cmd in
   setup)
     if command -v uv >/dev/null 2>&1; then
@@ -116,7 +179,7 @@ case $cmd in
       python3 -m venv .venv
       .venv/bin/pip install --upgrade pip
       .venv/bin/pip install 'ansible-core>=2.21,<2.22'
-      echo "ise: dev tooling (ansible-lint and friends) needs uv; see README" >&2
+      echo "ise: the dev tooling (ansible-lint and friends) needs uv; see README" >&2
     fi
     if [ -f credentials.yml ]; then
       echo "ise: credentials.yml already exists, left alone"
@@ -153,8 +216,8 @@ case $cmd in
       echo "ise: no such sites file: $sites_file" >&2
       exit 1
     fi
-    # destroy.yml is dry by default and stays that way until --force. The
-    # asymmetry with apply is the point: deletes have to be asked for.
+    # destroy.yml shows what it would delete and stays that way until --force.
+    # The asymmetry with apply is the point: deletes have to be asked for.
     [ "$force" -eq 1 ] && set -- -e ise_dry_run=false "$@"
     play destroy.yml -e "@$sites_file" "$@"
     ;;

@@ -87,18 +87,22 @@
     label: "{{ item.item }}"
   when: ref_colls.results is defined
 
+# `find` warns once for every path that is not there, and most resources have
+# no template directory at all -- sixty-odd warnings in a run that is behaving
+# perfectly normally. Checking first keeps the output about the appliance.
 - name: "{{ res.resource }}: find templates"
   ansible.builtin.find:
     paths: "{{ template_dir }}/{{ res.resource }}"
     patterns: "*.json.j2"
     file_type: file
   register: found
+  when: (template_dir ~ '/' ~ res.resource) is exists
 
 - name: "{{ res.resource }}: apply each object"
   ansible.builtin.include_tasks: tasks/apply_object.yml
   loop: >-
     {{ [] if ise_site_only | bool
-       else found.files | map(attribute='path') | sort | list }}
+       else found.files | default([]) | map(attribute='path') | sort | list }}
   loop_control:
     loop_var: tmpl
     label: "{{ tmpl | basename }}"
@@ -112,7 +116,9 @@
     patterns: "*.json.j2"
     file_type: file
   register: found_site
-  when: ise_sites | default([]) | length > 0
+  when:
+    - ise_sites | default([]) | length > 0
+    - (site_template_dir ~ '/' ~ res.resource) is exists
 
 - name: "{{ res.resource }}: apply each site template, once per site"
   ansible.builtin.include_tasks: tasks/apply_site_object.yml

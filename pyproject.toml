@@ -32,3 +32,13 @@ dev = [
 # Nothing here is importable -- this is a set of playbooks with a dependency
 # list, not a Python package. Without this uv tries to build and install it.
 package = false
+
+# Use the operating system's certificate store rather than the one bundled
+# into uv. On a corporate network that inspects TLS, the intercepting CA is
+# installed system-wide and nowhere else, so without this every `uv sync` ends
+# in a certificate verification failure that looks like a broken index.
+#
+# uv 0.9 and older spell this `native-tls = true` and do not know this key.
+# The environment variable is UV_SYSTEM_CERTS=1, or UV_NATIVE_TLS=1 on those
+# older versions; ./ise exports the former.
+system-certs = true
