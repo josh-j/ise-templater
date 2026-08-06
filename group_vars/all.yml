@@ -24,8 +24,14 @@ ise_timeout: 60
 # The GUI/ERS/OpenAPI password, which is a different password from the CLI
 # one. Resolution order, first hit wins:
 #
-#   1. ISE_PASSWORD in the environment
-#   2. the sops store, and only when ise_password_sops is true
+#   1. -e ise_password=... on the command line
+#   2. credentials.yml, if the file exists -- see credentials.example.yml
+#   3. ISE_PASSWORD in the environment
+#   4. the sops store, and only when ise_password_sops is true
+#
+# Steps 1 and 2 do not appear below because they do not need to: extra vars
+# and the include_vars in tasks/load_credentials.yml both outrank this file,
+# so a value from either simply replaces what is computed here.
 #
 # sops is off by default because it is a separately installed Go binary and
 # because the store below is one particular machine's, not something a fresh
@@ -35,6 +41,11 @@ ise_timeout: 60
 # purpose: Jinja evaluates filter arguments eagerly, so the `default` form ran
 # sops on every task even when ISE_PASSWORD was already set -- once per URI
 # call, hundreds of times in a full run. An if/else is lazy.
+# Where tasks/load_credentials.yml looks. Point it somewhere else with
+# `-e ise_credentials_file=/path/to/other.yml` to keep several appliances'
+# credentials side by side.
+ise_credentials_file: "{{ playbook_dir }}/credentials.yml"
+
 ise_password_sops: false
 sops_file: /srv/nix-config/secrets/common.yaml
 sops_key: lab_ise_ui_admin_pw

@@ -2,9 +2,9 @@
 # Render templates/ and push them at the target appliance. Creates what is
 # missing, updates what already exists, matching on object name.
 #
-#   ansible-playbook apply.yml -e ise_dry_run=true      # show, do not write
-#   ansible-playbook apply.yml
-#   ansible-playbook apply.yml -e resources=networkdevicegroup
+#   ./ise apply --dry                          # show, do not write
+#   ./ise apply
+#   ./ise apply -e resources=networkdevicegroup
 
 - name: Apply templates to ISE
   hosts: ise_target
@@ -31,6 +31,9 @@
     ise_site_only: false
 
   pre_tasks:
+    - name: Load credentials
+      ansible.builtin.import_tasks: tasks/load_credentials.yml
+
     - name: Check credentials
       ansible.builtin.import_tasks: tasks/check_password.yml
 

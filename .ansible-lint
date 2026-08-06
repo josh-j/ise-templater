@@ -1,0 +1,21 @@
+---
+# `./ise lint`
+
+profile: moderate
+
+exclude_paths:
+  - .venv/
+  - exports/
+  # One .j2 per ISE object, several hundred of them. They are JSON documents
+  # with Jinja in them, not Ansible files; lint has nothing to say about them
+  # and walking them is most of the runtime.
+  - templates/
+  - site-templates/
+
+skip_list:
+  # Every task inside tasks/ runs once per catalog entry, so the resource name
+  # has to be in the task name or the output is fifty identical lines. Leading
+  # with it is what makes a run readable -- `sgt: export via ERS` sorts and
+  # scans, `export via ERS: sgt` does not. The rule wants the template at the
+  # end; the output is worth more than the rule.
+  - name[template]

@@ -1,14 +1,18 @@
 # ise-templater
 
-Three Ansible playbooks. Read Cisco ISE configuration out of one appliance,
-turn it into templates, push the templates at another.
+Ansible playbooks. Read Cisco ISE configuration out of one appliance, turn it
+into templates, push the templates at another.
 
 ```
+check.yml        does this node answer, with these credentials?
 export.yml       ISE  ->  exports/<node>/<resource>.json
 templatize.yml   exports/  ->  templates/<resource>/<name>.json.j2
 apply.yml        templates/ + site-templates/  ->  ISE
 destroy.yml      undoes apply, in reverse dependency order
 ```
+
+`./ise` is the front door — `./ise export`, `./ise apply --dry` — and every
+playbook still runs directly with `ansible-playbook` if you would rather.
 
 It speaks both configuration APIs ISE exposes, because neither one is enough:
 
@@ -27,50 +31,92 @@ about sixty lines doing the three things Jinja cannot say cleanly.
 
 ## Setup
 
-`pyproject.toml` plus `uv.lock` — `ansible-core` and what it pulls in, pinned.
-Python 3.12+, which is `ansible-core` 2.21's floor rather than ours.
-
 ```sh
-uv sync
-export ISE_PASSWORD=...
+./ise setup                  # dependencies, and a credentials.yml to fill in
+$EDITOR credentials.yml      # the ISE admin password goes here
+./ise check                  # does every node answer on both APIs?
 ```
 
-On a fresh Ubuntu Server 24.04 box, which ships Python 3.12.3:
+`./ise setup` runs `uv sync` and copies `credentials.example.yml` to
+`credentials.yml` if you do not already have one. `./ise check` is one GET
+against each API on every host in the inventory, so a wrong password costs you
+a few seconds instead of surfacing forty minutes into an export.
+
+`pyproject.toml` plus `uv.lock` — `ansible-core` and what it pulls in, pinned.
+Python 3.12+, which is `ansible-core` 2.21's floor rather than ours. The `dev`
+dependency group adds `ansible-dev-tools` (`ansible-lint`, `ansible-navigator`,
+`molecule`, `pytest-ansible`) and `uv` itself; `uv sync` installs it, `uv sync
+--no-dev` does not. Nothing in the playbooks imports any of it — it is the
+authoring toolchain, and `./ise lint` is what uses it.
+
+On a fresh Ubuntu Server 24.04 box, which ships Python 3.12.3 and no `uv`:
 
 ```sh
-sudo apt install -y python3-venv         # or curl -LsSf https://astral.sh/uv/install.sh | sh
-python3 -m venv .venv && . .venv/bin/activate && pip install ansible-core
+curl -LsSf https://astral.sh/uv/install.sh | sh && ./ise setup
+```
+
+or without `uv` at all:
+
+```sh
+sudo apt install -y python3-venv
+python3 -m venv .venv && .venv/bin/pip install 'ansible-core>=2.21,<2.22'
 ```
 
 Either way it is wheels the whole way down — `cryptography` and `cffi` have
 manylinux builds for CPython 3.12, so no compiler and no `-dev` packages. The
 `uv` route installs the locked versions; the `venv` route just takes what PyPI
-offers, which is fine since nothing here depends on the lockfile.
+offers, which is fine since nothing here depends on the lockfile. `./ise` finds
+whichever of the two you ended up with.
 
-There is no `sops` step and nothing to install for it. The admin password comes
-from `ISE_PASSWORD` in the environment, and the playbooks stop with a message
-saying so if it is unset. This is the *UI* password, which on ISE is a separate
-credential from the CLI/SSH one.
+## Credentials
 
-The sops store is still there for the machine that has it —
+The admin password is the *UI* password, which on ISE is a separate credential
+from the CLI/SSH one. The account needs the ERS Admin role, and Super Admin or
+equivalent for the OpenAPI resources. Four places to put it, first hit wins:
+
+| | |
+|---|---|
+| `-e ise_password=...` | one run |
+| `credentials.yml` | the normal answer — gitignored, `credentials.example.yml` is the committed template |
+| `ISE_PASSWORD` | the environment, as before |
+| sops | only with `-e ise_password_sops=true` |
+
+`credentials.yml` may be encrypted and is read either way:
+
+```sh
+ansible-vault encrypt credentials.yml
+./ise check                  # prompts, or reads .vault-pass if you made one
+```
+
+Different accounts per appliance go in `host_vars/<node>.yml`, which outranks
+`credentials.yml`. The sops store is still there for the machine that has it —
 `-e ise_password_sops=true` reads `lab_ise_ui_admin_pw` out of
 `/srv/nix-config/secrets/common.yaml` — but it is off by default and never
 consulted otherwise.
 
+Nothing carrying a secret is committable: `credentials.yml`, `.vault-pass` and
+`exports/` are all gitignored.
+
 ## Use
 
 ```sh
-uv run ansible-playbook export.yml
-uv run ansible-playbook templatize.yml
-uv run ansible-playbook apply.yml -e ise_dry_run=true      # look first
-uv run ansible-playbook apply.yml
+./ise export
+./ise templatize
+./ise apply --dry            # look first
+./ise apply
 ```
 
-Narrow any of them to specific resources:
+Anything `./ise` does not recognise goes to `ansible-playbook` untouched, so
+narrowing a run to specific resources reads the same either way:
 
 ```sh
+./ise export -e resources=policy-set,condition
+./ise apply --dry -e resources=policy-set
+
 uv run ansible-playbook export.yml -e resources=policy-set,condition
 ```
+
+`./ise help` lists the rest — `sites`, `destroy`, `lint`, `check`.
 
 ## Inventory
 
@@ -101,7 +147,7 @@ all four playbooks as if it were not in the catalog:
 | `lifecycle` | **off** | node groups, trusted certs, session service nodes |
 
 ```sh
-uv run ansible-playbook export.yml -e ise_group_portals_override=true
+./ise export -e ise_group_portals_override=true
 ```
 
 Off by default is about signal, not capability: portals are large nested
@@ -260,16 +306,18 @@ before writing it.
 is one file per *kind* of object, rendered once per entry in `sites.yml`:
 
 ```sh
-uv run ansible-playbook apply.yml -e @sites.yml -e ise_dry_run=true
-uv run ansible-playbook apply.yml -e @sites.yml
+./ise sites --dry
+./ise sites
+./ise sites other-sites.yml        # any sites file, not just sites.yml
 ```
 
 Nothing in the apply path needed changing to support it: object identity already
 came from the *rendered* `name`, not the filename. Adding a site is an entry in
 `sites.yml`; you never copy a template.
 
-`-e ise_site_only=true` pushes only the fan-out, leaving the exported templates
-untouched.
+`./ise sites` passes `-e ise_site_only=true` for you, so it pushes only the
+fan-out and leaves the exported templates untouched. Add `-e
+ise_site_only=false` to the same line to push both.
 
 The shipped example builds two sites, New York and London, from nothing — 11
 objects each, in dependency order:
@@ -319,8 +367,8 @@ would supply.
 ## Tearing it down
 
 ```sh
-uv run ansible-playbook destroy.yml -e @sites.yml                      # show only
-uv run ansible-playbook destroy.yml -e @sites.yml -e ise_dry_run=false
+./ise destroy                      # show only
+./ise destroy --force              # actually delete
 ```
 
 `destroy.yml` is dry by default — the opposite of `apply.yml`. You have to ask

@@ -1,8 +1,8 @@
 ---
 # Remove what the site templates created, in reverse dependency order.
 #
-#   ansible-playbook destroy.yml -e @sites.yml                     # show only
-#   ansible-playbook destroy.yml -e @sites.yml -e ise_dry_run=false
+#   ./ise destroy                                                  # show only
+#   ./ise destroy --force
 #
 # This one is dry by default, the opposite of apply.yml. You have to ask for
 # the writes.
@@ -41,6 +41,9 @@
     ise_confirm_destroy_exported: false
 
   pre_tasks:
+    - name: Load credentials
+      ansible.builtin.import_tasks: tasks/load_credentials.yml
+
     - name: Check credentials
       ansible.builtin.import_tasks: tasks/check_password.yml
 

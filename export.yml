@@ -1,8 +1,8 @@
 ---
 # Read configuration out of the source appliance into exports/<node>/.
 #
-#   ansible-playbook export.yml
-#   ansible-playbook export.yml -e resources=networkdevicegroup,networkdevice
+#   ./ise export
+#   ./ise export -e resources=networkdevicegroup,networkdevice
 
 - name: Export ISE configuration
   hosts: ise_source
@@ -20,6 +20,9 @@
     export_dir: "{{ playbook_dir }}/exports/{{ inventory_hostname }}"
 
   pre_tasks:
+    - name: Load credentials
+      ansible.builtin.import_tasks: tasks/load_credentials.yml
+
     - name: Check credentials
       ansible.builtin.import_tasks: tasks/check_password.yml
 

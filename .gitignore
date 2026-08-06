@@ -3,6 +3,12 @@
 # scratch. Remove this line only if you have decided otherwise on purpose.
 exports/
 
+# The admin password lives here. credentials.example.yml is the committed
+# one; credentials.yml never is, encrypted with ansible-vault or not.
+credentials.yml
+.vault-pass
+.env
+
 *.retry
 
 __pycache__/
