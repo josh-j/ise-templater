@@ -1,0 +1,80 @@
+---
+# Render one template only far enough to learn its name, then delete whatever
+# holds that name on the target. Deleting a policy set takes its rules with
+# it, so rules are never deleted individually.
+
+- name: Render {{ tmpl | basename }}
+  ansible.builtin.set_fact:
+    ise_destroy_obj: "{{ lookup('template', tmpl) | from_json }}"
+
+- name: Note the object name
+  ansible.builtin.set_fact:
+    ise_destroy_obj_name: >-
+      {{ ise_destroy_obj.name if res.children is defined
+         else ((ise_destroy_obj[res.root] | ise_name_of(res.name_key)) if
+      res.root is defined
+               else (ise_destroy_obj | ise_name_of(res.name_key))) }}
+
+- name: "Look up by name: {{ ise_destroy_obj_name }}"
+  ansible.builtin.uri:
+    url: >-
+      {{ ise_ers_url }}/config/{{ res.resource }}/name/{{ ise_destroy_obj_name
+      | urlencode }}
+    status_code: [200, 404]
+  register: ise_destroy_by_name
+  check_mode: false
+  when:
+    - res.api == 'ers'
+    - res.lookup == 'name'
+
+# Three ways to find the id, and which one applies is decided by the catalog.
+# They were one nested conditional; as three guarded tasks the branches are
+# mutually exclusive on their face, and exactly one of them sets
+# `ise_destroy_doomed_id`.
+# An empty string means absent, which is how the delete below decides to skip.
+- name: Resolve the id from the OpenAPI collection
+  ansible.builtin.set_fact:
+    ise_destroy_doomed_id: >-
+      {{ (ise_destroy_target_coll.json.response | default([])
+      | ise_find_id(res.name_key, ise_destroy_obj_name)) if
+      ise_destroy_target_coll.status | default(0) == 200 else '' }}
+  when: res.api == 'openapi'
+
+- name: Resolve the id by name
+  ansible.builtin.set_fact:
+    ise_destroy_doomed_id: >-
+      {{ ise_destroy_by_name.json[res.root].id if ise_destroy_by_name.status ==
+      200
+      else '' }}
+  when:
+    - res.api == 'ers'
+    - res.lookup == 'name'
+
+# The resources with no usable GET-by-name, matched against the collection
+# ise_common/ers_collection.yml indexed up front.
+- name: Resolve the id from the indexed collection
+  ansible.builtin.set_fact:
+    ise_destroy_doomed_id: >-
+      {{ ise_common_ers_name_map[ise_destroy_obj_name] | default('', true) }}
+  when:
+    - res.api == 'ers'
+    - res.lookup != 'name'
+
+- name: Report the intended delete
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'DELETE' if ise_destroy_doomed_id != '' else 'absent  ' }}
+      {{ res.resource }} {{ ise_destroy_obj_name }}
+  when: ise_dry_run | bool
+
+- name: Delete {{ ise_destroy_obj_name }}
+  ansible.builtin.uri:
+    url: >-
+      {{ (ise_api_url ~ res.path ~ '/' ~ ise_destroy_doomed_id) if res.api ==
+      'openapi' else (ise_ers_url ~ '/config/' ~ res.resource ~ '/' ~
+      ise_destroy_doomed_id) }}
+    method: DELETE
+    status_code: [200, 204]
+  when:
+    - ise_destroy_doomed_id != ''
+    - not (ise_dry_run | bool)

@@ -1,0 +1,22 @@
+---
+# Render the templates and push them at the target appliance. Creates what is
+# missing, updates what already exists, matching on object name.
+
+- name: Choose the resources to apply
+  ansible.builtin.include_role:
+    name: ise_common
+    tasks_from: select
+
+- name: Announce the target
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'DRY RUN -- ' if ise_dry_run | bool else '' }}applying
+      {{ ise_common_selected | map(attribute='resource') | join(', ') }}
+      to {{ inventory_hostname }} ({{ ansible_host }})
+
+- name: Apply each resource in catalog order
+  ansible.builtin.include_tasks: resource.yml
+  loop: "{{ ise_common_selected }}"
+  loop_control:
+    loop_var: res
+    label: "{{ res.resource }}"

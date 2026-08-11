@@ -1,0 +1,15 @@
+---
+# The one check worth making before a long run.
+#
+# Imported from every playbook. The resource selection is a separate entry
+# point (`tasks_from: select`) because it has to run after the credentials are
+# in place but is not part of getting them.
+#
+# There is no "load the credentials" task. The password lives in
+# inventory/group_vars/all/99-credentials.yml, which Ansible reads for itself
+# along with every other file in that directory, and a file that is not there
+# is simply a file that sets nothing.
+
+- name: Check that a password is available
+  ansible.builtin.import_tasks: password.yml
+  when: ise_common_require_password | bool

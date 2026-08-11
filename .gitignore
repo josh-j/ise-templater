@@ -1,9 +1,9 @@
 # Anything that holds a secret, and anything a run produces.
 
-# The ISE admin password. credentials.example.yml is the committed template;
-# credentials.yml never is, ansible-vault encrypted or not. Leading slash so
-# this only ever means the one in the project root.
-/credentials.yml
+# The ISE admin password. The .example beside it is the committed template;
+# the real file never is, ansible-vault encrypted or not. Ansible skips the
+# .example itself -- only .yml, .yaml and .json in group_vars are loaded.
+/inventory/group_vars/all/99-credentials.yml
 /.vault-pass
 /.env
 
@@ -15,6 +15,10 @@ exports/
 
 *.retry
 __pycache__/
+
+# Where ansible-galaxy and ansible-lint put the roles and collections they
+# install for themselves. Ours are in roles/ and are committed.
+.ansible/
 
 # uv.lock is committed; the environment it builds is not.
 .venv/

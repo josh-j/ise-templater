@@ -1,0 +1,111 @@
+---
+# Create or update one already-rendered ERS object, matched by name.
+
+- name: Note the object name
+  ansible.builtin.set_fact:
+    ise_apply_obj_name: "{{ ise_apply_obj[res.root][res.name_key] }}"
+    ise_apply_lookup_mode: "{{ res.lookup }}"
+
+# The template names its parent; the appliance wants an id, and its own one.
+# `parentName` is not a field ISE knows, so the swap has to happen before the
+# body is sent, not alongside it.
+- name: "Point at the target's own parent id: {{ ise_apply_obj_name }}"
+  ansible.builtin.set_fact:
+    ise_apply_obj: >-
+      {{ {res.root: (ise_apply_obj[res.root]
+      | ise_swap_parent(ise_common_ers_name_map, res.parent_ref, false))} }}
+  when: res.parent_ref is defined
+
+# Same idea, but resolved against other resources on the target: an egress
+# matrix cell names its SGTs and SGACLs, and each has to become this
+# appliance's id for that name.
+# A referenced name the collection listing did not carry -- the reserved SGT
+# "ANY" above all -- is resolved one at a time by name, the same way
+# templatize resolved it by id.
+- name: Resolve referenced names the listings omit
+  ansible.builtin.uri:
+    url: >-
+      {{ ise_ers_url }}/config/{{ item.resource }}/name/{{ item.id
+      | urlencode }}
+    status_code: [200, 404]
+  register: ise_apply_direct_names
+  check_mode: false
+  loop: >-
+    {{ ise_apply_obj[res.root]
+    | ise_unresolved_refs(res.refs, ise_apply_ref_maps, true) }}
+  loop_control:
+    label: "{{ item.resource }}/{{ item.id }}"
+  when: res.refs is defined
+
+- name: Fold them into the maps
+  ansible.builtin.set_fact:
+    ise_apply_ref_maps: >-
+      {{ ise_apply_ref_maps | combine({item.item.resource:
+           (ise_apply_ref_maps[item.item.resource] | default({}))
+           | combine({item.item.id: (item.json.values() | list | first).id}) },
+         recursive=True) }}
+  loop: >-
+    {{ ise_apply_direct_names.results | default([])
+    | selectattr('status', 'equalto', 200) | list }}
+  loop_control:
+    label: "{{ item.item.resource }}/{{ item.item.id }}"
+
+- name: "Point at the target's own referenced ids: {{ ise_apply_obj_name }}"
+  ansible.builtin.set_fact:
+    ise_apply_obj: >-
+      {{ {res.root: (ise_apply_obj[res.root] | ise_swap_refs(res.refs,
+      ise_apply_ref_maps, false))} }}
+  when: res.refs is defined
+
+# Get-by-name is exact and costs one request, so it is used wherever ISE
+# supports it. Where it answers 405 the catalog says `lookup: collection` and
+# apply_resource.yml has already indexed the collection by name.
+- name: "Look up by name: {{ ise_apply_obj_name }}"
+  ansible.builtin.uri:
+    url: >-
+      {{ ise_ers_url }}/config/{{ res.resource }}/name/{{ ise_apply_obj_name
+      | urlencode }}
+    status_code: [200, 404]
+  register: ise_apply_by_name
+  check_mode: false
+  when: ise_apply_lookup_mode == 'name'
+
+- name: Resolve the existing id, if any
+  ansible.builtin.set_fact:
+    ise_apply_existing_id: >-
+      {{ (ise_apply_by_name.json[res.root].id if ise_apply_by_name.status ==
+      200 else '') if ise_apply_lookup_mode == 'name' else
+      (ise_common_ers_name_map[ise_apply_obj_name] | default('', true)) }}
+
+- name: Report the intended change
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'CREATE' if ise_apply_existing_id == '' else 'UPDATE' }}
+      {{ res.resource }} {{ ise_apply_obj_name }}
+  when: ise_dry_run | bool
+
+- name: Create {{ ise_apply_obj_name }}
+  ansible.builtin.uri:
+    url: "{{ ise_ers_url }}/config/{{ res.resource }}"
+    method: POST
+    body_format: json
+    body: "{{ ise_apply_obj }}"
+    status_code: [201]
+  when:
+    - ise_apply_existing_id == ''
+    - not (ise_dry_run | bool)
+
+# ERS wants the id in the body as well as the URL on an update.
+- name: Update {{ ise_apply_obj_name }}
+  ansible.builtin.uri:
+    url: >-
+      {{ ise_ers_url }}/config/{{ res.resource }}/{{ ise_apply_existing_id }}
+    method: PUT
+    body_format: json
+    body: >-
+      {{ ise_apply_obj
+      | combine({res.root: {'id': ise_apply_existing_id}}, recursive=True) }}
+    status_code: [200]
+  when:
+    - ise_apply_existing_id != ''
+    - not (ise_dry_run | bool)

@@ -1,0 +1,17 @@
+---
+# Every playbook runs this role first. The two knobs below are what the
+# playbooks disagree about; everything else it does is the same each time.
+
+# Fail early when no password is available. templatize.yml turns this off:
+# it works off exports/ and only reaches the appliance for the references a
+# listing omits, so an absent password must not stop a run that never needs
+# one.
+ise_common_require_password: true
+
+# `mode: config` resources export but are never templated -- see the catalog
+# for why each one is that way. Only export wants them in the selection.
+ise_common_exclude_config: true
+
+# destroy walks the catalog backwards, because ISE refuses to drop an object
+# something else still points at.
+ise_common_reverse: false

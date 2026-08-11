@@ -1,0 +1,57 @@
+---
+# Which catalog entries this run touches, as the fact `ise_common_selected`.
+#
+# All four verbs answer this the same way -- the enabled families, or exactly
+# what `-e resources=` named -- and differ only in whether `mode: config`
+# entries survive and whether the order is reversed. It lived in four
+# playbooks as four copies until they became roles.
+#
+#   ./ise export -e resources=sgt
+#   ./ise apply --dry -e resources=policy-set
+
+- name: Resolve which resources this run touches
+  vars:
+    # Every optional key filled in first, so that nothing downstream has to
+    # restate a default in order to read one.
+    catalog: "{{ ise_catalog | ise_catalog_defaults }}"
+    # The families this run has enabled, unless -e resources= named some.
+    matched: >-
+      {{ (catalog | ise_enabled_groups(ise_groups_enabled)) if (resources
+      | default('') | trim) == '' else catalog
+      | selectattr('resource', 'in', resources.split(',') | map('trim') | list)
+      | list }}
+    # `mode: config` entries export but are never templated, so every verb
+    # except export drops them here.
+    kept: >-
+      {{ (matched | ise_exclude_config) if ise_common_exclude_config | bool
+      else matched }}
+  ansible.builtin.set_fact:
+    ise_common_selected: >-
+      {{ (kept | reverse | list) if ise_common_reverse | bool else kept }}
+
+- name: Fail on an unknown resource name
+  ansible.builtin.assert:
+    that: ise_common_selected | length > 0
+    quiet: true
+    fail_msg: >-
+      No catalog entry matched {{ resources | default('') }}. Known:
+      {{ ise_catalog | map(attribute='resource') | join(', ') }}
+
+# A family named in the catalog but missing from 02-families.yml has no switch
+# to turn it off, and `ise_enabled_groups` reads an absent switch as ON -- so
+# the resources would be exported and applied with no way to say otherwise,
+# while `./ise export --without <it>` rejected the name as unknown. Silent in
+# the direction that writes to appliances, which is the direction worth an
+# assert.
+- name: Fail on a catalog family with no switch
+  vars:
+    unswitched: >-
+      {{ ise_catalog | selectattr('group', 'defined') | map(attribute='group')
+         | unique | reject('in', ise_groups_enabled | list) | list }}
+  ansible.builtin.assert:
+    that: unswitched | length == 0
+    quiet: true
+    fail_msg: >-
+      The catalog puts resources in {{ unswitched | join(', ') }}, which
+      group_vars/all/02-families.yml does not declare. Add an
+      `ise_group_<name>` flag and an `ise_groups_enabled` entry for each.

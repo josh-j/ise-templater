@@ -140,6 +140,26 @@ def ise_swap_ref(obj, mapping, from_field, to_field):
     return out
 
 
+def ise_swap_parent(obj, mapping, spec, to_name=True):
+    """Rewrite an object's reference to its own parent, id <-> name.
+
+    `spec` is the catalog's `parent_ref` -- {id_field, name_field} -- or
+    nothing at all for the resources that have no parent, which is most of
+    them. Absence used to be expressed by passing a field name picked never to
+    match ('_none'), which held only for as long as no ISE object had a field
+    called `_none`. Here it is just an empty spec.
+
+    `to_name` picks the direction, the same way `ise_swap_refs` does: True for
+    templatize (id -> name, against the export's own contents), False for
+    apply (name -> id, against the target's).
+    """
+    if not spec:
+        return obj
+    if to_name:
+        return ise_swap_ref(obj, mapping, spec["id_field"], spec["name_field"])
+    return ise_swap_ref(obj, mapping, spec["name_field"], spec["id_field"])
+
+
 def ise_swap_refs(obj, refs, maps, to_name):
     """Rewrite id-valued references that point at *other* resources.
 
@@ -259,6 +279,86 @@ def ise_name_of(obj, key):
     return node
 
 
+def ise_index(items, key="name", value="id"):
+    """`{key: value}` for every object in `items`. Name-to-id, mostly.
+
+    Seven callers built this by hand, and each one spelled its source
+    expression out twice so that Jinja could zip the two halves together:
+
+        dict(coll.results | map(attribute='json.SearchResult.resources')
+             | flatten | map(attribute='name') | zip(
+             coll.results | map(attribute='json.SearchResult.resources')
+             | flatten | map(attribute='id')))
+
+    The two halves had to stay identical by hand, and nothing enforced it --
+    change one and every name silently maps to the wrong object's id, which
+    is a wrong-object write rather than an error.
+
+    Both `key` and `value` may be dotted, so rule objects that carry their
+    name one level down index like everything else. Objects missing the key
+    are skipped rather than indexed under nothing.
+    """
+    out = {}
+    for item in items or []:
+        name = ise_name_of(item, key)
+        if name is not None:
+            out[name] = ise_name_of(item, value)
+    return out
+
+
+def ise_unwrap_collection(result, singleton=False, name=None, more=None):
+    """The objects in an OpenAPI collection response, whatever shape it came in.
+
+    Three shapes to reconcile. Most collections wrap their contents in
+    `response`; a few -- endpoint-custom-attribute among them -- return a bare
+    JSON array with no envelope at all; and a singleton returns one object
+    where a collection returns a list, so it is named and boxed into a list of
+    one.
+
+    `more` is the later pages, each its own registered uri result. A singleton
+    never has any. A non-200 is not an error: `optional` resources legitimately
+    404, and export carries on.
+    """
+    if (result or {}).get("status") != 200:
+        return []
+    body = (result or {}).get("json")
+    if singleton:
+        return [dict(body or {}, name=name)]
+    objects = list(body if isinstance(body, list) else ((body or {}).get("response") or []))
+    for page in more or []:
+        objects.extend(((page or {}).get("json") or {}).get("response") or [])
+    return objects
+
+
+# Catalog keys that may be left out of an entry, and what they mean when they
+# are. Only keys whose *absence* carries no meaning belong here: `children`,
+# `parent_ref`, `refs` and `root` are all tested with `is defined`, so filling
+# them in would change which tasks run.
+_CATALOG_DEFAULTS = {
+    "api": "ers",
+    "name_key": "name",
+    "lookup": "name",
+    "mode": "full",
+    "detail": True,
+    "optional": False,
+    "singleton": False,
+    "strip": [],
+    "templatize_skip": {},
+}
+
+
+def ise_catalog_defaults(catalog):
+    """Fill in each entry's optional keys, once, so nothing restates them.
+
+    These defaults used to be written at the point of use -- `res.api |
+    default('ers')` in eight places, `res.name_key | default('name')` in
+    twelve, forty-eight in total. Two costs: the catalog's real shape was
+    written down nowhere, and two places were free to default the same key
+    differently without anything noticing. `res.api` now just works.
+    """
+    return [dict(_CATALOG_DEFAULTS, **entry) for entry in catalog or []]
+
+
 def ise_find_id(collection, key, name):
     """The id of the object in `collection` whose `key` equals `name`.
 
@@ -285,6 +385,22 @@ def ise_sort_objects(objects, key):
     if not items or not all(isinstance(o, dict) and key in o for o in items):
         return items
     return sorted(items, key=lambda o: str(o.get(key) or ""))
+
+
+def ise_page_range(total, size, minimum=1):
+    """The 1-based page numbers needed to walk `total` objects `size` at a time.
+
+    Always at least `minimum` page, and that is the whole point of having this
+    written down once. `networkdeviceprofile` and `certificateprofile` report
+    `total: 0` while returning every object they hold, so a page count derived
+    from `total` alone reads nothing at all for them -- see
+    docs/ise-api-notes.md. Export defended against that inline and the apply
+    and destroy paths did not, which is the kind of difference that survives
+    only until an appliance exercises it.
+    """
+    size = int(size or 1)
+    pages = (int(total or 0) + size - 1) // size
+    return list(range(1, max(int(minimum), pages) + 1))
 
 
 def ise_slug(name):
@@ -321,12 +437,20 @@ class FilterModule(object):
             "ise_enabled_groups": ise_enabled_groups,
             "ise_tokenize": ise_tokenize,
             "ise_policy_refs": ise_policy_refs,
-            "ise_swap_ref": ise_swap_ref,
+            # ise_swap_ref is deliberately not exported: it is the mechanism
+            # both swap filters share, and every playbook reaches it through
+            # ise_swap_parent or ise_swap_refs, which know which direction
+            # they are going.
+            "ise_swap_parent": ise_swap_parent,
             "ise_swap_refs": ise_swap_refs,
+            "ise_page_range": ise_page_range,
             "ise_unresolved_refs": ise_unresolved_refs,
             "ise_reject_field": ise_reject_field,
             "ise_slug": ise_slug,
             "ise_name_of": ise_name_of,
+            "ise_index": ise_index,
+            "ise_unwrap_collection": ise_unwrap_collection,
+            "ise_catalog_defaults": ise_catalog_defaults,
             "ise_find_id": ise_find_id,
             "ise_sort_objects": ise_sort_objects,
             "ise_rewrite_condition_ids": ise_rewrite_condition_ids,

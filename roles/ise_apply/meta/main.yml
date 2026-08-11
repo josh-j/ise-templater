@@ -1,0 +1,10 @@
+---
+# Renders the templates and pushes them at ise_target, creating what is
+# missing and updating what exists, matching on object name.
+#
+# Not Galaxy content: this is one of this repository's own roles and nothing
+# outside the project will ever install it. The file is here because Ansible
+# reads role metadata from it, and because an empty dependency list is worth
+# stating outright -- the play names the order it wants, no role pulls in
+# another.
+dependencies: []

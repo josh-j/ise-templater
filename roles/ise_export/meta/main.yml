@@ -1,0 +1,10 @@
+---
+# Reads configuration out of ise_source into exports/<node>/, one JSON file
+# per resource.
+#
+# Not Galaxy content: this is one of this repository's own roles and nothing
+# outside the project will ever install it. The file is here because Ansible
+# reads role metadata from it, and because an empty dependency list is worth
+# stating outright -- the play names the order it wants, no role pulls in
+# another.
+dependencies: []

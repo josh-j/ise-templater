@@ -1,0 +1,14 @@
+---
+# Turn exports/<node>/*.json into one .j2 per object.
+
+- name: Choose the resources to templatize
+  ansible.builtin.include_role:
+    name: ise_common
+    tasks_from: select
+
+- name: Templatize each resource
+  ansible.builtin.include_tasks: resource.yml
+  loop: "{{ ise_common_selected }}"
+  loop_control:
+    loop_var: res
+    label: "{{ res.resource }}"

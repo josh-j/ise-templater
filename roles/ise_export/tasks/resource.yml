@@ -1,0 +1,12 @@
+---
+# Dispatch on which API the resource lives behind. The two are different
+# enough -- port, envelope, pagination, whether the listing carries the whole
+# object -- that one set of tasks covering both would be worse than two.
+
+- name: "Export via ERS: {{ res.resource }}"
+  ansible.builtin.include_tasks: ers.yml
+  when: res.api == 'ers'
+
+- name: "Export via OpenAPI: {{ res.resource }}"
+  ansible.builtin.include_tasks: openapi.yml
+  when: res.api == 'openapi'

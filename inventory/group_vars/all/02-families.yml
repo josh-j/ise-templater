@@ -1,0 +1,61 @@
+---
+# Which families of configuration the playbooks touch at all.
+#
+# Every entry in the catalog (03-catalog.yml) belongs to one family. A family
+# switched off here is skipped by export, templatize, apply and destroy alike,
+# exactly as if those resources were not in the catalog.
+#
+# Turn one on for a single run:
+#
+#   ./ise export --with portals
+#   ./ise export -e ise_group_portals=true      # the same thing, the long way
+#
+# or change the default by editing the value below.
+#
+#   core          network devices and groups, endpoint groups, conditions,
+#                 allowed protocols, dACLs, authorization profiles, profiler
+#                 profiles, dictionaries, policy sets, global exceptions
+#   trustsec      SGTs, SGACLs, the egress matrix, virtual networks, SXP,
+#                 IP-to-SGT mappings
+#   deviceadmin   TACACS+ profiles and command sets, device-admin policy
+#   identity      LDAP, REST ID stores, RADIUS/TACACS proxying, AD join points
+#   guest         guest types and locations, sponsor groups, SSIDs
+#   integration   pxGrid, ACI, IPsec, ANC, Data Connect, SMS
+#   portals       the portal family and its themes
+#   runtime       endpoints and other session state
+#   lifecycle     node groups, trusted certificates, repositories
+#
+# The three that are off are about signal, not capability. Portals are large
+# nested objects with per-node URLs baked into them, runtime state changes by
+# the second, and lifecycle describes one deployment rather than a portable
+# configuration. All three are fully modelled and all three are one flag away.
+
+ise_group_core: true
+ise_group_trustsec: true
+ise_group_deviceadmin: true
+ise_group_identity: true
+ise_group_guest: true
+ise_group_integration: true
+ise_group_portals: false
+ise_group_runtime: false
+ise_group_lifecycle: false
+
+# The playbooks read the map rather than the nine variables above. Values may
+# arrive here as the string "true" when they come from the command line, so
+# ise_enabled_groups coerces rather than trusting truthiness.
+#
+# Adding a family means adding it in both shapes -- a flag above and an entry
+# below. Nothing else needs touching: `./ise` reads the family names out of
+# the flags above rather than keeping its own list, and ise_common's `select`
+# refuses to run if the catalog puts a resource in a family declared in
+# neither shape.
+ise_groups_enabled:
+  core: "{{ ise_group_core }}"
+  trustsec: "{{ ise_group_trustsec }}"
+  deviceadmin: "{{ ise_group_deviceadmin }}"
+  identity: "{{ ise_group_identity }}"
+  guest: "{{ ise_group_guest }}"
+  integration: "{{ ise_group_integration }}"
+  portals: "{{ ise_group_portals }}"
+  runtime: "{{ ise_group_runtime }}"
+  lifecycle: "{{ ise_group_lifecycle }}"

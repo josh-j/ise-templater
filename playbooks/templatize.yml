@@ -1,0 +1,20 @@
+---
+# Turn exports/<node>/*.json into templates -- one file per object, with the
+# server-owned fields removed and the site-specific literals rewritten as
+# Jinja references. Output lands in templates/exported/.
+#
+#   ./ise templatize
+#   ./ise templatize -e resources=networkdevice
+
+- name: Templatize the export
+  hosts: ise_source
+  gather_facts: false
+  vars:
+    # Credentials are loaded but not required: this playbook works off
+    # exports/ and only reaches the appliance for the references a listing
+    # omits, so an absent password must not stop a run that never needs one.
+    ise_common_require_password: false
+
+  roles:
+    - ise_common
+    - ise_templatize

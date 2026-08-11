@@ -31,8 +31,11 @@ warns if it exhausts `ise_api_max_pages`.
 **`total: 0` does not mean empty.** `networkdeviceprofile` and
 `certificateprofile` report zero while returning every object they hold, and
 ignore `size` entirely — `?size=2` still returns all 9. Deriving a page count
-from `total` alone exports nothing at all for them, silently. Export always
-fetches page one for that reason.
+from `total` alone exports nothing at all for them, silently. Every page count
+in this project therefore goes through `ise_page_range`, which never returns
+fewer than one page. It is one filter rather than the arithmetic written out
+at each call site precisely so that the guard cannot be present in one place
+and missing in another — which is how it was until it was noticed.
 
 **Empty is not absent.** Most of the resources added late to this project read
 `[]` on the source lab, and an empty collection is indistinguishable from a

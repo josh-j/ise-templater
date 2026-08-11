@@ -1,0 +1,25 @@
+---
+# Read configuration out of the source appliance into exports/<node>/.
+#
+# Export is the one verb that keeps `mode: config` entries: they are worth
+# having on disk even though nothing templates them.
+
+- name: Choose the resources to export
+  ansible.builtin.include_role:
+    name: ise_common
+    tasks_from: select
+  vars:
+    ise_common_exclude_config: false
+
+- name: Create the export directory
+  ansible.builtin.file:
+    path: "{{ export_dir }}"
+    state: directory
+    mode: "0700"
+
+- name: Export each resource
+  ansible.builtin.include_tasks: resource.yml
+  loop: "{{ ise_common_selected }}"
+  loop_control:
+    loop_var: res
+    label: "{{ res.resource }}"

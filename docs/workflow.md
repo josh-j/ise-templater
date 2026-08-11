@@ -4,8 +4,8 @@ Four steps, in order. Each one has a playbook and a `./ise` command.
 
 ```
 ./ise export       ISE  ->  exports/<node>/<resource>.json
-./ise templatize   exports/  ->  templates/<resource>/<name>.json.j2
-./ise apply        templates/  ->  ISE
+./ise templatize   exports/  ->  templates/exported/<resource>/<name>.json.j2
+./ise apply        templates/exported/  ->  ISE
 ./ise destroy      undoes an apply, in reverse order
 ```
 
@@ -35,7 +35,7 @@ credentials and internal user records in cleartext.
 ```
 
 Turns each exported object into its own file under
-`templates/<resource>/<name>.json.j2`. Three things happen on the way:
+`templates/exported/<resource>/<name>.json.j2`. Three things happen on the way:
 
 **Server-owned fields are stripped, recursively.** `id` and `link` describe
 where an object lives on one appliance; the target mints its own. Recursion
@@ -47,7 +47,7 @@ SGACLs, `systemDefined` on endpoint groups, `hitCounts` on policy sets.
 `{"NetworkDevice": {...}}` and expects the same shape back.
 
 **Site-specific literals become variables.** `ise_tokens` in
-`group_vars/all/04-templating.yml` is a list of regular expressions and what to
+`inventory/group_vars/all/04-templating.yml` is a list of regular expressions and what to
 replace them with:
 
 ```yaml
@@ -152,17 +152,17 @@ have supplied.
 
 ## Fanning one template across sites
 
-`templates/` is one file per object — an export of what exists.
-`site-templates/` is one file per *kind* of object, rendered once per entry in
-`sites.yml`:
+`templates/exported/` is one file per object — an export of what exists.
+`templates/site/` is one file per *kind* of object, rendered once per entry in
+`vars/sites.yml`:
 
 ```sh
 ./ise sites --dry
 ./ise sites
-./ise sites other-sites.yml        # any sites file, not just sites.yml
+./ise sites vars/other-sites.yml   # any sites file, not just vars/sites.yml
 ```
 
-Adding a site is an entry in `sites.yml`. You never copy a template.
+Adding a site is an entry in `vars/sites.yml`. You never copy a template.
 
 Nothing in the apply path needed changing to support this: object identity
 already came from the *rendered* name, not the filename.
@@ -210,7 +210,7 @@ rule names it. Deleting in apply order fails on the first dependency; deleting
 in reverse works because the referrer is always gone first. Deleting a policy
 set takes its rules with it, so rules are never deleted individually.
 
-By default it only touches what the *site* templates name. `templates/` is an
+By default it only touches what the *site* templates name. `templates/exported/` is an
 export of the appliance's own configuration, much of it Cisco built-ins, so
 pointing a delete at it needs both `-e ise_site_only=false` and `-e
 ise_confirm_destroy_exported=true`, and refuses without both.

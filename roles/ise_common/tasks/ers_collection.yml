@@ -1,0 +1,45 @@
+---
+# Read one ERS collection whole and index it by name, as the fact
+# `ise_common_ers_name_map`.
+#
+# Some ERS resources have no GET-by-name, and `?filter=name.EQ.` cannot stand
+# in for it -- guesttype and sponsorgroup accept the filter, ignore it, and
+# return the whole collection, which would have matched the first object's id
+# to every template. For those the collection is read once here and matched in
+# memory, rather than trusting a per-object query.
+#
+# apply and destroy both need this and disagree slightly on when, so the
+# caller decides and passes `ers_index_needed`: apply also wants the map in
+# order to resolve a parent id, destroy never does. It arrives as a string,
+# hence `| bool` -- "False" is a perfectly truthy string to Jinja.
+
+- name: "Count the collection: {{ res.resource }}"
+  ansible.builtin.uri:
+    url: "{{ ise_ers_url }}/config/{{ res.resource }}?size=1"
+  register: ise_common_coll_count
+  check_mode: false
+  when: ise_common_ers_index_needed | bool
+
+- name: "Page the collection: {{ res.resource }}"
+  ansible.builtin.uri:
+    url: >-
+      {{ ise_ers_url }}/config/{{ res.resource }}?size={{ ise_page_size
+      }}&page={{
+      page }}
+  register: ise_common_coll_pages
+  check_mode: false
+  loop: >-
+    {{ (ise_common_coll_count.json.SearchResult.total
+    | ise_page_range(ise_page_size)) if ise_common_ers_index_needed
+    | bool else [] }}
+  loop_control:
+    loop_var: page
+    label: "page {{ page }}"
+
+- name: "Index the collection by name: {{ res.resource }}"
+  ansible.builtin.set_fact:
+    ise_common_ers_name_map: >-
+      {{ (ise_common_coll_pages.results
+      | map(attribute='json.SearchResult.resources') | flatten
+      | ise_index(res.name_key, 'id')) if ise_common_ers_index_needed
+      | bool else {} }}

@@ -1,0 +1,13 @@
+---
+# What each HTTP status means, in words that name the fix. A 401 and a refused
+# connection are different problems, so they get different sentences rather
+# than one "failed". 0 is what a connection that never answered registers as.
+ise_check_verdicts:
+  200: ok
+  401: >-
+    401 -- wrong password, or the account is missing the ERS Admin
+    / Super Admin role
+  403: 403 -- the account authenticated but is not allowed this API
+  0: >-
+    no answer -- check the address, that the node is up, and that the API
+    is enabled under Administration > System > Settings > API Settings

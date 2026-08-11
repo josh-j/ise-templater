@@ -6,8 +6,9 @@ API that was never switched on, and that is what it tests.
 ## Before a run gets going
 
 **`No ISE password.`**
-Nothing has a password to use. Copy `credentials.example.yml` to
-`credentials.yml` and fill it in, or run `./ise setup`, which does the copying.
+Nothing has a password to use. Run `./ise setup`, which copies
+the `.example` in `inventory/group_vars/all/` to `99-credentials.yml` for you
+to fill in.
 `ISE_PASSWORD` in the environment works too.
 
 **`ise: no ansible-playbook found. Run './ise setup' first.`**
@@ -15,13 +16,13 @@ No environment yet. `./ise setup` builds one. If you have no `uv`, see the
 install notes at the end of the README.
 
 **`ERROR! Attempting to decrypt but no vault secrets found`**
-`credentials.yml` is ansible-vault encrypted and nothing supplied the vault
+The credentials file is ansible-vault encrypted and nothing supplied the vault
 password. `./ise` prompts on its own when it notices, so this usually means you
 ran `ansible-playbook` directly — add `--ask-vault-pass`, or put the password
 in `.vault-pass`, which `./ise` picks up.
 
 **The run says `skipping: no hosts matched`.**
-The group in the playbook has no hosts. Check `inventory.yml`, and check you
+The group in the playbook has no hosts. Check `inventory/hosts.yml`, and check you
 did not `--limit` yourself out of the run.
 
 ## What `./ise check` tells you
@@ -37,7 +38,7 @@ credential from the CLI/SSH one.
 The password is right and the role is not.
 
 **`no answer`**
-Nothing responded. In order of likelihood: the address in `inventory.yml` is
+Nothing responded. In order of likelihood: the address in `inventory/hosts.yml` is
 wrong, the appliance is not up, the API was never enabled (*Administration →
 System → Settings → API Settings* — ERS and Open API are separate switches), or
 something between you and it is blocking 9060 or 443.

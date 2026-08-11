@@ -1,0 +1,53 @@
+---
+# A flat OpenAPI resource. There is no get-by-name here, so the collection is
+# read and matched in memory.
+
+- name: Note the object name
+  ansible.builtin.set_fact:
+    ise_apply_obj_name: "{{ ise_apply_obj | ise_name_of(res.name_key) }}"
+
+- name: "Read the resource on the target: {{ res.resource }}"
+  ansible.builtin.uri:
+    url: "{{ ise_api_url }}{{ res.path }}"
+    status_code: "{{ [200, 400, 404, 500] if res.optional else [200] }}"
+  register: ise_apply_target_coll
+  check_mode: false
+
+- name: Resolve the existing id, if any
+  ansible.builtin.set_fact:
+    ise_apply_existing_id: >-
+      {{ (ise_apply_target_coll.json.response | default([])
+          | ise_find_id(res.name_key, ise_apply_obj_name))
+         if ise_apply_target_coll.status == 200 else '' }}
+
+- name: Report the intended change
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'CREATE' if ise_apply_existing_id == '' else 'UPDATE' }} {{
+      res.resource }}
+      {{ ise_apply_obj_name }}
+  when: ise_dry_run | bool
+
+- name: Create {{ ise_apply_obj_name }}
+  ansible.builtin.uri:
+    url: "{{ ise_api_url }}{{ res.path }}"
+    method: POST
+    body_format: json
+    body: "{{ ise_apply_obj }}"
+    status_code: [200, 201]
+  when:
+    - ise_apply_existing_id == ''
+    - not (ise_dry_run | bool)
+
+# The id goes in the body as well as the URL, exactly as ERS wants it. Omit it
+# and ISE answers 500 with "Bad Request. Please see logs for more details."
+- name: Update {{ ise_apply_obj_name }}
+  ansible.builtin.uri:
+    url: "{{ ise_api_url }}{{ res.path }}/{{ ise_apply_existing_id }}"
+    method: PUT
+    body_format: json
+    body: "{{ ise_apply_obj | combine({'id': ise_apply_existing_id}) }}"
+    status_code: [200]
+  when:
+    - ise_apply_existing_id != ''
+    - not (ise_dry_run | bool)

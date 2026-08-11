@@ -1,0 +1,31 @@
+---
+# Where this project keeps things on disk.
+#
+# These used to be set in each playbook's `vars:`, four times over, which made
+# them four places to change. They are the same for every play, so they live
+# here.
+
+# The repository root. `playbook_dir` is playbooks/, since that is where the
+# playbooks are, so everything below hangs off its parent rather than off it.
+# Move the playbooks and this one line is what needs changing.
+project_dir: "{{ playbook_dir | dirname }}"
+
+# Raw exports, one directory per source node. Gitignored -- they carry live
+# RADIUS shared secrets and repository credentials in cleartext.
+export_dir: "{{ project_dir }}/exports/{{ inventory_hostname }}"
+
+# The two template trees, split by who writes them:
+#
+#   exported/   one .j2 per object, written by ./ise templatize. Machine
+#               output -- do not hand-edit, the next templatize overwrites it.
+#   site/       one .j2 per KIND of object, hand-written, rendered once per
+#               entry in vars/sites.yml.
+#
+# Top-level rather than inside the ise_apply role, deliberately. Ansible's
+# role `templates/` directory earns its place by letting the template module
+# resolve a bare filename against it -- and nothing here does that. Every
+# lookup in this project passes the absolute path below, so putting these in
+# the role would buy the convention and cost four directories of depth on the
+# artefact this repository exists to produce.
+template_dir: "{{ project_dir }}/templates/exported"
+site_template_dir: "{{ project_dir }}/templates/site"

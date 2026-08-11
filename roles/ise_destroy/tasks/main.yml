@@ -1,0 +1,44 @@
+---
+# Remove what the site templates created, in reverse dependency order.
+#
+# Reverse is the whole point: ISE refuses to drop an object something else
+# still points at. A dACL cannot go while an authorization profile names it,
+# and that profile cannot go while a policy set rule names it. Deleting in
+# apply order fails on the first dependency; reverse works because the
+# referrer is always gone first.
+
+- name: Choose the resources to walk, in reverse
+  ansible.builtin.include_role:
+    name: ise_common
+    tasks_from: select
+  vars:
+    ise_common_reverse: true
+
+# `templates/exported/` is an export of what the appliance already had, much
+# of it Cisco built-ins, so pointing a delete at it would strip the
+# deployment. That needs an explicit second flag and still refuses without it.
+- name: Refuse to delete exported objects without an explicit say-so
+  ansible.builtin.assert:
+    that: ise_site_only | bool or ise_confirm_destroy_exported | bool
+    quiet: true
+    fail_msg: >-
+      ise_site_only=false would delete every object named by the exported
+      templates, which are this appliance's own configuration including
+      Cisco built-ins. Pass -e ise_confirm_destroy_exported=true as well
+      if that is genuinely what you want.
+
+- name: Announce the target
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'DRY RUN -- ' if ise_dry_run
+      | bool else 'DELETING from ' }}{{ inventory_hostname }} ({{ ansible_host
+      }}), {{ 'site templates only' if ise_site_only
+      | bool else 'site AND exported templates' }}, reverse order: {{
+      ise_common_selected | map(attribute='resource') | join(' <- ') }}
+
+- name: Destroy each resource in reverse catalog order
+  ansible.builtin.include_tasks: resource.yml
+  loop: "{{ ise_common_selected }}"
+  loop_control:
+    loop_var: res
+    label: "{{ res.resource }}"

@@ -1,0 +1,78 @@
+---
+# Export one ERS resource. A collection listing normally carries only
+# id/name/link, so every object has to be fetched individually -- except for
+# the handful ISE offers no GET-by-id for, where the listing is all there is.
+
+- name: "How many are there: {{ res.resource }}"
+  ansible.builtin.uri:
+    url: "{{ ise_ers_url }}/config/{{ res.resource }}?size=1"
+    status_code: "{{ [200, 400, 404, 500] if res.optional else [200] }}"
+  register: ise_export_ers_count
+  check_mode: false
+
+# Always fetch at least one page. `networkdeviceprofile` and
+# `certificateprofile` report `total: 0` while returning every object they
+# have, and ignore `size` entirely -- deriving the page count from `total`
+# alone exports nothing at all for them.
+- name: "Page over the collection: {{ res.resource }}"
+  ansible.builtin.uri:
+    url: >-
+      {{ ise_ers_url }}/config/{{ res.resource }}?size={{ ise_page_size
+      }}&page={{
+      page }}
+  register: ise_export_ers_pages
+  check_mode: false
+  loop: >-
+    {{ [] if ise_export_ers_count.status != 200 or 'SearchResult' not in
+    (ise_export_ers_count.json
+    | default({})) else ise_export_ers_count.json.SearchResult.total
+    | ise_page_range(ise_page_size) }}
+  loop_control:
+    loop_var: page
+    label: "page {{ page }}"
+
+- name: "Collect the listing: {{ res.resource }}"
+  ansible.builtin.set_fact:
+    ise_export_ers_listed: >-
+      {{ ise_export_ers_pages.results
+      | map(attribute='json.SearchResult.resources') | flatten | list }}
+
+# A full last page means the count that sized this loop may have been short.
+- name: "Warn if the collection looks truncated: {{ res.resource }}"
+  ansible.builtin.debug:
+    msg: >-
+      {{ res.resource }}: last page came back full
+      ({{ ise_page_size }} objects) -- SearchResult.total said
+      {{ ise_export_ers_count.json.SearchResult.total }}, so the export may be
+      short.
+  when:
+    - ise_export_ers_listed | length > 0
+    - ise_export_ers_count.status == 200
+    - >-
+        (ise_export_ers_pages.results | last).json.SearchResult.resources
+        | length == ise_page_size | int
+    - >-
+        ise_export_ers_listed | length
+        < (ise_export_ers_count.json.SearchResult.total | int)
+
+- name: "Fetch each object: {{ res.resource }}"
+  ansible.builtin.uri:
+    url: "{{ ise_ers_url }}/config/{{ res.resource }}/{{ object_id }}"
+  register: ise_export_ers_objects
+  check_mode: false
+  loop: >-
+    {{ ise_export_ers_listed | map(attribute='id')
+    | list if res.detail else [] }}
+  loop_control:
+    loop_var: object_id
+    label: "{{ object_id }}"
+
+- name: "Write the export: {{ res.resource }}"
+  ansible.builtin.copy:
+    content: >-
+      {{ (ise_export_ers_objects.results | map(attribute='json')
+      | map(attribute=res.root)
+      | list if res.detail else ise_export_ers_listed)
+      | ise_sort_objects(res.name_key) | to_nice_json }}
+    dest: "{{ export_dir }}/{{ res.resource }}.json"
+    mode: "0600"

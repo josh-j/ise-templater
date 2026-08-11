@@ -1,0 +1,31 @@
+---
+# Render the templates and push them at the target appliance. Creates what is
+# missing, updates what already exists, matching on object name.
+#
+#   ./ise apply --dry                          # show, do not write
+#   ./ise apply
+#   ./ise apply -e resources=networkdevicegroup
+
+- name: Apply templates to ISE
+  hosts: ise_target
+  gather_facts: false
+  module_defaults:
+    ansible.builtin.uri:
+      user: "{{ ise_user }}"
+      password: "{{ ise_password }}"
+      force_basic_auth: true
+      validate_certs: "{{ ise_validate_certs }}"
+      timeout: "{{ ise_timeout }}"
+      headers:
+        Accept: application/json
+  vars:
+    # Print what would happen and write nothing.
+    ise_dry_run: false
+    # Push only the site fan-out, leaving the exported templates alone. Useful
+    # when you want to add sites to an appliance without also rewriting the
+    # objects the export happened to capture.
+    ise_site_only: false
+
+  roles:
+    - ise_common
+    - ise_apply

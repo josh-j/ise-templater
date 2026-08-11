@@ -1,0 +1,26 @@
+---
+# Are the credentials right and does the appliance answer? One GET against
+# each API, on every host in the inventory, before you spend forty minutes on
+# an export that was going to 401 on the first call.
+#
+#   ./ise check
+#   ./ise check --limit ise_target
+#
+# Nothing here writes, so it is safe against any node in the inventory.
+
+- name: Check ISE reachability and credentials
+  hosts: all
+  gather_facts: false
+  module_defaults:
+    ansible.builtin.uri:
+      user: "{{ ise_user }}"
+      password: "{{ ise_password }}"
+      force_basic_auth: true
+      validate_certs: "{{ ise_validate_certs }}"
+      timeout: "{{ ise_timeout }}"
+      headers:
+        Accept: application/json
+
+  roles:
+    - ise_common
+    - ise_check

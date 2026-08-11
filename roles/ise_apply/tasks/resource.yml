@@ -1,0 +1,104 @@
+---
+# Every template for one resource, in filename order. That ordering matters
+# for network device groups: "Device Type#All Device Types" sorts ahead of
+# "Device Type#All Device Types#Switch", so parents land before children.
+
+# A name-to-id map of this resource on the target, where one is needed: for
+# the resources with no usable GET-by-name, and to resolve a parent id.
+- name: "Index the collection on the target: {{ res.resource }}"
+  ansible.builtin.include_role:
+    name: ise_common
+    tasks_from: ers_collection
+  vars:
+    ise_common_ers_index_needed: >-
+      {{ res.lookup == 'collection' or res.parent_ref is defined }}
+
+# Policy and rule conditions are stored by reference, and the reference carries
+# an id that only means something on the appliance it came from. This is the
+# target's own name-to-id map, used to repoint them.
+#
+# Read here rather than once at the start of the play: a site template can
+# create the very conditions its policy set then references, and a map built
+# before that run would be missing them. ISE catches it -- "condition.children
+# [1].id, must not be null" -- but only after the run is already underway.
+- name: "Read the target's condition library: {{ res.resource }}"
+  ansible.builtin.uri:
+    url: "{{ ise_api_url }}/api/v1/policy/network-access/condition"
+  register: ise_apply_target_conditions
+  check_mode: false
+  when: res.children is defined
+
+- name: "Index the condition library by name: {{ res.resource }}"
+  ansible.builtin.set_fact:
+    ise_apply_condition_map: >-
+      {{ ise_apply_target_conditions.json.response | ise_index }}
+  when: res.children is defined
+
+# name -> id for the OTHER resources this one points at, read from the target
+# so the ids belong to the appliance being written to.
+- name: "Start with no reference maps: {{ res.resource }}"
+  ansible.builtin.set_fact:
+    ise_apply_ref_maps: {}
+
+- name: "Read each referenced resource on the target: {{ res.resource }}"
+  ansible.builtin.uri:
+    url: "{{ ise_ers_url }}/config/{{ item }}?size={{ ise_page_size }}"
+  register: ise_apply_ref_colls
+  check_mode: false
+  loop: >-
+    {{ (res.refs | default([])) | map(attribute='resource') | unique | list }}
+  loop_control:
+    label: "{{ item }}"
+
+- name: "Index them by name: {{ res.resource }}"
+  ansible.builtin.set_fact:
+    ise_apply_ref_maps: >-
+      {{ ise_apply_ref_maps | combine({item.item:
+           item.json.SearchResult.resources | ise_index}) }}
+  loop: "{{ ise_apply_ref_colls.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: ise_apply_ref_colls.results is defined
+
+# `find` warns once for every path that is not there, and most resources have
+# no template directory at all -- sixty-odd warnings in a run that is behaving
+# perfectly normally. Checking first keeps the output about the appliance.
+- name: "Find templates: {{ res.resource }}"
+  ansible.builtin.find:
+    paths: "{{ template_dir }}/{{ res.resource }}"
+    patterns: "*.json.j2"
+    file_type: file
+  register: ise_apply_found
+  when: (template_dir ~ '/' ~ res.resource) is exists
+
+- name: "Apply each object: {{ res.resource }}"
+  ansible.builtin.include_tasks: object.yml
+  loop: >-
+    {{ [] if ise_site_only | bool
+       else ise_apply_found.files | default([]) | map(attribute='path') | sort
+    | list }}
+  loop_control:
+    loop_var: tmpl
+    label: "{{ tmpl | basename }}"
+
+# One template, N objects. The object's identity comes from the rendered name,
+# not the filename, so a template that names itself after `site` produces a
+# distinct object per site with no extra machinery.
+- name: "Find site templates: {{ res.resource }}"
+  ansible.builtin.find:
+    paths: "{{ site_template_dir }}/{{ res.resource }}"
+    patterns: "*.json.j2"
+    file_type: file
+  register: ise_apply_found_site
+  when:
+    - ise_sites | default([]) | length > 0
+    - (site_template_dir ~ '/' ~ res.resource) is exists
+
+- name: "Apply each site template, once per site: {{ res.resource }}"
+  ansible.builtin.include_tasks: site_object.yml
+  loop: >-
+    {{ ise_apply_found_site.files | default([]) | map(attribute='path') | sort
+    | list }}
+  loop_control:
+    loop_var: tmpl
+    label: "{{ tmpl | basename }}"

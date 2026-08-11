@@ -1,7 +1,7 @@
 # The catalog
 
-`ise_catalog` in `group_vars/all/03-catalog.yml` is the list of everything this
-project knows how to move: 79 resources across ISE's two APIs.
+`ise_catalog` in `inventory/group_vars/all/03-catalog.yml` is the list of
+everything this project knows how to move: 79 resources across ISE's two APIs.
 
 **List order is apply order.** Groups and conditions come before the objects
 that reference them. Export and templatize walk the list forwards; destroy
@@ -13,8 +13,8 @@ over the list.
 ## Families
 
 Every entry belongs to a family, and a family switched off in
-`group_vars/all/02-families.yml` is skipped by all four playbooks as if those
-resources were not in the catalog.
+`inventory/group_vars/all/02-families.yml` is skipped by all four playbooks as
+if those resources were not in the catalog.
 
 | family | default | what is in it |
 |---|---|---|
@@ -83,6 +83,15 @@ Everything except `resource` is optional.
 | `parent_ref` | an id reference to this resource's own objects |
 | `refs` | id references to *other* resources, list-valued or not |
 | `templatize_skip` | a field and value marking objects not worth templating |
+
+The defaults above are filled in once, by `ise_catalog_defaults` in
+`filter_plugins/ise.py`, as each run works out which resources it touches. So
+a task reads `res.api` rather than restating `res.api | default('ers')`, and
+adding a key with a default means adding it to `_CATALOG_DEFAULTS` there.
+
+Four keys are deliberately **not** given defaults — `children`, `parent_ref`,
+`refs` and `root`. Their absence is meaningful: tasks branch on
+`res.children is defined`, so filling them in would change which tasks run.
 
 ## Why each key exists
 

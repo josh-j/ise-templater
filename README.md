@@ -8,8 +8,8 @@ deployment, a rebuilt lab, another site.
 
 ```
 ./ise export       ISE  ->  exports/<node>/<resource>.json
-./ise templatize   exports/  ->  templates/<resource>/<name>.json.j2
-./ise apply        templates/  ->  ISE
+./ise templatize   exports/  ->  templates/exported/<resource>/<name>.json.j2
+./ise apply        templates/exported/  ->  ISE
 ./ise destroy      undoes an apply, in reverse order
 ```
 
@@ -33,9 +33,9 @@ one alone exposes all of the configuration.
 ## First run
 
 ```sh
-./ise setup                  # installs dependencies, makes credentials.yml
-$EDITOR credentials.yml      # put the ISE admin password in it
-$EDITOR inventory.yml        # put your appliance addresses in it
+./ise setup                    # installs deps, writes a credentials file
+$EDITOR inventory/group_vars/all/99-credentials.yml    # the ISE password
+$EDITOR inventory/hosts.yml                            # your appliances
 ./ise check                  # does every appliance answer?
 ```
 
@@ -55,12 +55,12 @@ Then the actual job:
 
 | | |
 |---|---|
-| `./ise setup` | install dependencies, create `credentials.yml` |
+| `./ise setup` | install dependencies, write the credentials file |
 | `./ise check` | confirm each appliance answers on both APIs |
 | `./ise export` | read configuration into `exports/` |
-| `./ise templatize` | turn `exports/` into `templates/` |
-| `./ise apply [--dry]` | push `templates/` at the target |
-| `./ise sites [--dry]` | push the per-site fan-out from `sites.yml` |
+| `./ise templatize` | turn `exports/` into `templates/exported/` |
+| `./ise apply [--dry]` | push `templates/exported/` at the target |
+| `./ise sites [--dry]` | push the per-site fan-out from `vars/sites.yml` |
 | `./ise destroy [--force]` | remove what the site templates created |
 | `./ise lint` | run `ansible-lint` over the playbooks |
 | `./ise help` | all of the above, with the options |
@@ -83,7 +83,7 @@ Narrowing a run is the usual way to work once you are past the first export:
 
 ## Which appliance gets written to
 
-`inventory.yml` has two groups:
+`inventory/hosts.yml` has two groups:
 
 | group | what runs against it |
 |---|---|
@@ -95,58 +95,96 @@ radius. Check it before an apply.
 
 ## Where the password goes
 
-`credentials.yml` in the project root. It is gitignored;
-`credentials.example.yml` is the committed template and explains every option.
+`inventory/group_vars/all/99-credentials.yml` — variables belong in
+`group_vars/`, and this is one. It is gitignored; the `.example` beside it is
+the committed template and explains every option. Ansible reads it as
+variables for every host with no wiring up, and reads nothing at all if it is
+not there, which is why the environment variable below still works.
+
+The `99-` is what makes it win: files in that directory are read in name
+order, so it lands after `01-connection.yml` and replaces the password worked
+out there.
 
 Four places are checked, first hit wins:
 
 | | |
 |---|---|
 | `-e ise_password=...` | one run, from the command line |
-| `credentials.yml` | the normal answer |
+| `99-credentials.yml` | the normal answer |
 | `ISE_PASSWORD` | the environment |
 | sops | only with `-e ise_password_sops=true` |
 
-`credentials.yml` may be encrypted and is read either way:
+It may be encrypted and is read either way:
 
 ```sh
-ansible-vault encrypt credentials.yml
+ansible-vault encrypt inventory/group_vars/all/99-credentials.yml
 ./ise check                  # prompts, or reads .vault-pass if you made one
 ```
 
-Different accounts per appliance go in `host_vars/<node>.yml`.
+Different accounts per appliance go in `inventory/host_vars/<node>.yml`.
 
-Nothing carrying a secret is committable: `credentials.yml`, `.vault-pass` and
-`exports/` are all gitignored. Raw exports hold RADIUS shared secrets and
+Nothing carrying a secret is committable: the credentials file, `.vault-pass`
+and `exports/` are all gitignored. Raw exports hold RADIUS shared secrets and
 repository credentials in cleartext — templates are the artefact meant for git.
 
 ## Where everything lives
 
+Standard Ansible layout: playbooks in `playbooks/`, the inventory and its
+variables in `inventory/`, the work itself in `roles/`. The only thing in the
+project root you run is `./ise`.
+
 ```
 ise                       the command you type
-check.yml                 the playbooks. One job each, named after it
-export.yml
-templatize.yml
-apply.yml
-destroy.yml
 
-inventory.yml             which appliances, and which is written to
-credentials.yml           your password (gitignored)
-sites.yml                 the sites the fan-out builds
+playbooks/                one per command, named after it. Each is a dozen
+  check.yml               lines -- which appliances, how to authenticate,
+  export.yml              and which roles to run
+  templatize.yml
+  apply.yml
+  destroy.yml
 
-group_vars/all/           settings every playbook shares
-  01-connection.yml         addresses, ports, timeouts, credentials
-  02-families.yml           which families of configuration to touch
-  03-catalog.yml            every resource this project knows about
-  04-templating.yml         what gets stripped and rewritten
+inventory/                which appliances, and the settings that go with
+  hosts.yml               them. group_vars/ and host_vars/ are read from
+                          beside the inventory, so they live here too --
+                          split them up and Ansible silently loads nothing
+  group_vars/all/           settings every host shares, read in name order
+    00-paths.yml              where the exports and the templates live
+    01-connection.yml         addresses, ports, timeouts, credentials
+    02-families.yml           which families of configuration to touch
+    03-catalog.yml            every resource this project knows about
+    04-templating.yml         what gets stripped and rewritten
+    99-credentials.yml        your password (gitignored). Last, so it wins
+  host_vars/                settings for one appliance only
 
-tasks/                    the steps the playbooks are made of
+vars/                     data the playbooks are pointed at
+  sites.yml                 the sites the fan-out builds
+
+roles/                    the work. One per command, plus a shared one
+  ise_common/               the password check, and which resources a run
+                            touches
+  ise_check/
+  ise_export/
+  ise_templatize/
+  ise_apply/
+  ise_destroy/
+
 filter_plugins/ise.py     the handful of things Jinja cannot say cleanly
-templates/                one file per exported object
-site-templates/           one file per kind of object, rendered per site
+
+templates/
+  exported/               one file per exported object, written by
+                          ./ise templatize -- edits here are lost on the
+                          next run
+  site/                   one file per kind of object, hand-written,
+                          rendered once per site
+
 exports/                  raw exports (gitignored)
 docs/                     the long explanations
 ```
+
+A role is a directory of task files with a `tasks/main.yml` that Ansible runs
+first. To follow what `./ise apply` does, open `playbooks/apply.yml`, see that
+it runs `ise_common` then `ise_apply`, and read
+`roles/ise_apply/tasks/main.yml`.
 
 ## Reading more
 

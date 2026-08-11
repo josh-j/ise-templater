@@ -1,0 +1,13 @@
+---
+# One site template, rendered once per site.
+#
+# `site` is a loop variable rather than a set_fact so that the hand-written
+# templates under templates/site/ can go on naming it plainly -- it is the
+# contract between this fan-out and every one of those files.
+
+- name: "Apply for each site: {{ tmpl | basename }}"
+  ansible.builtin.include_tasks: object.yml
+  loop: "{{ ise_sites | default([]) }}"
+  loop_control:
+    loop_var: site
+    label: "{{ site.name }}"

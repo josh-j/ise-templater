@@ -1,0 +1,102 @@
+---
+# A policy set and the rules that make it mean anything, applied together.
+
+- name: Note the policy set name
+  ansible.builtin.set_fact:
+    ise_apply_obj_name: "{{ ise_apply_obj.name }}"
+    # Every condition reference in the document still carries the source
+    # appliance's condition id. Repoint them at the target's own ids, matched
+    # by condition name, before anything is written.
+    ise_apply_doc: >-
+      {{ ise_apply_obj | ise_rewrite_condition_ids(ise_apply_condition_map) }}
+
+- name: "Check what it depends on: {{ ise_apply_obj_name }}"
+  ansible.builtin.include_tasks: policyset_preflight.yml
+
+- name: Read policy sets on the target
+  ansible.builtin.uri:
+    url: "{{ ise_api_url }}{{ res.path }}"
+  register: ise_apply_target_sets
+  check_mode: false
+
+- name: Resolve the existing policy set id, if any
+  ansible.builtin.set_fact:
+    ise_apply_existing_id: >-
+      {{ (ise_apply_target_sets.json.response | selectattr('name', 'equalto',
+      ise_apply_obj_name)
+          | map(attribute='id') | list | first) | default('', true) }}
+
+- name: Report the intended change
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'CREATE' if ise_apply_existing_id == '' else 'UPDATE' }} {{
+      res.resource }} {{ ise_apply_obj_name }}
+      ({{ res.children | map('extract', ise_apply_doc) | select | map('length')
+      | sum }} rules)
+  when: ise_dry_run | bool
+
+# Ranks are a dense sequence: a new set has to take one inside the existing
+# range or ISE rejects it outright ("Rank=99. Must be in range between 0 and
+# 3"). So a template cannot carry a rank -- it is assigned here, immediately
+# above the Default set, which keeps Default last where it belongs.
+- name: "Choose where it goes in the order: {{ ise_apply_obj_name }}"
+  ansible.builtin.set_fact:
+    ise_apply_insert_rank: >-
+      {{ (ise_apply_target_sets.json.response | selectattr('default')
+      | map(attribute='rank') | list | first)
+      | default(ise_apply_target_sets.json.response | length, true) }}
+  when: ise_apply_existing_id == ''
+
+- name: Create policy set {{ ise_apply_obj_name }}
+  ansible.builtin.uri:
+    url: "{{ ise_api_url }}{{ res.path }}"
+    method: POST
+    body_format: json
+    body: >-
+      {{ ise_apply_doc.policySet | combine({'rank': ise_apply_insert_rank
+      | int}) }}
+    status_code: [200, 201]
+  register: ise_apply_created_set
+  when:
+    - ise_apply_existing_id == ''
+    - not (ise_dry_run | bool)
+
+- name: Update policy set {{ ise_apply_obj_name }}
+  ansible.builtin.uri:
+    url: "{{ ise_api_url }}{{ res.path }}/{{ ise_apply_existing_id }}"
+    method: PUT
+    body_format: json
+    body: >-
+      {{ ise_apply_doc.policySet | combine({'id': ise_apply_existing_id}) }}
+    status_code: [200]
+  when:
+    - ise_apply_existing_id != ''
+    - not (ise_dry_run | bool)
+
+# Re-read rather than trust the create response: a POST answers with the
+# object it made, but a dry run made nothing and an update never had an id
+# problem to begin with. One lookup covers all three cases.
+- name: Re-resolve the policy set id
+  ansible.builtin.uri:
+    url: "{{ ise_api_url }}{{ res.path }}"
+  register: ise_apply_target_sets_after
+  check_mode: false
+  when: not (ise_dry_run | bool)
+
+- name: Note the policy set id to hang rules off
+  ansible.builtin.set_fact:
+    ise_apply_policyset_id: >-
+      {{ (ise_apply_target_sets_after.json.response | selectattr('name',
+      'equalto', ise_apply_obj_name)
+          | map(attribute='id') | list | first) | default('', true) }}
+  when: not (ise_dry_run | bool)
+
+- name: Apply each rule collection
+  ansible.builtin.include_tasks: policyset_rules.yml
+  loop: "{{ res.children }}"
+  loop_control:
+    loop_var: child
+    label: "{{ ise_apply_obj_name }}/{{ child }}"
+  when:
+    - not (ise_dry_run | bool)
+    - ise_apply_policyset_id != ''

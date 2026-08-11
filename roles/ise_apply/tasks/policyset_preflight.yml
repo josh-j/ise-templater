@@ -1,0 +1,96 @@
+---
+# Check every object this policy set points at, before writing anything.
+#
+# Without this, a missing authorization profile surfaces as a 400 partway
+# through -- after the set exists and some of its rules are in -- and you are
+# left reconciling a half-applied policy by hand. Here it is a list.
+
+- name: "Collect what it references: {{ ise_apply_obj_name }}"
+  ansible.builtin.set_fact:
+    ise_apply_policy_refs: "{{ ise_apply_doc | ise_policy_refs }}"
+
+# The identity-stores endpoint is the authoritative list of everything an
+# `identitySourceName` may legally name -- internal stores, AD join points and
+# sequences together. This used to be declared uncheckable on the grounds that
+# no single endpoint answered for all three. It does.
+- name: "Read the target's identity stores: {{ ise_apply_obj_name }}"
+  ansible.builtin.uri:
+    url: "{{ ise_api_url }}/api/v1/policy/network-access/identity-stores"
+  register: ise_apply_target_id_stores
+  check_mode: false
+  when: >-
+    ise_apply_policy_refs | selectattr('kind', 'equalto', 'idstoresequence')
+    | list | length > 0
+
+- name: "Resolve each reference on the target: {{ ise_apply_obj_name }}"
+  ansible.builtin.uri:
+    url: >-
+      {{ (ise_api_url ~
+      '/api/v1/policy/network-access/condition/condition-by-name/' ~ (ref.name
+      | urlencode)) if ref.kind == 'condition' else (ise_ers_url ~ '/config/' ~
+      ref.kind ~ '/name/' ~ (ref.name | urlencode)) }}
+    status_code: [200, 404]
+  register: ise_apply_ref_checks
+  check_mode: false
+  loop: >-
+    {{ ise_apply_policy_refs | rejectattr('kind', 'equalto', 'idstoresequence')
+    | list }}
+  loop_control:
+    loop_var: ref
+    label: "{{ ref.kind }}/{{ ref.name }}"
+
+- name: "Check identity sources against that list: {{ ise_apply_obj_name }}"
+  ansible.builtin.set_fact:
+    ise_apply_id_store_misses: >-
+      {{ ise_apply_policy_refs
+      | selectattr('kind', 'equalto', 'idstoresequence')
+      | rejectattr('name', 'in', (ise_apply_target_id_stores.json
+      | default([], true)) | map(attribute='name') | list) | list }}
+
+- name: "Sort the misses: {{ ise_apply_obj_name }}"
+  ansible.builtin.set_fact:
+    ise_apply_refs_missing: >-
+      {{ (ise_apply_ref_checks.results | selectattr('status', 'equalto', 404)
+          | map(attribute='ref') | rejectattr('kind', 'in', preflight_advisory)
+      | list)
+         + (ise_apply_id_store_misses | default([])) }}
+    ise_apply_refs_advisory: >-
+      {{ ise_apply_ref_checks.results | selectattr('status', 'equalto', 404)
+         | map(attribute='ref') | selectattr('kind', 'in', preflight_advisory)
+      | list }}
+
+- name: "Note the inconclusive ones: {{ ise_apply_obj_name }}"
+  ansible.builtin.debug:
+    msg: >-
+      {{ ise_apply_obj_name }}: could not confirm
+      {{ ise_apply_refs_advisory | map(attribute='name') | join(', ') }}.
+  when: ise_apply_refs_advisory | length > 0
+
+# A dry run creates nothing, so anything earlier in this same run would have
+# supplied is legitimately still absent. Report it, do not fail on it -- the
+# list is the answer to "what does this need", which is what a dry run is for.
+- name: "Report unresolved references: {{ ise_apply_obj_name }}"
+  ansible.builtin.debug:
+    msg: >-
+      {{ ise_apply_obj_name }} needs {{ ise_apply_refs_missing
+      | map(attribute='name')
+      | join(', ') }} -- absent now; earlier CREATEs in this run would supply
+      them.
+  when:
+    - ise_dry_run | bool
+    - ise_apply_refs_missing | length > 0
+
+- name: "Fail on anything missing: {{ ise_apply_obj_name }}"
+  ansible.builtin.assert:
+    that: ise_apply_refs_missing | length == 0
+    fail_msg: >-
+      {{ ise_apply_obj_name }} references objects the target does not have:
+      {{ ise_apply_refs_missing | map('to_json') | join('; ') }}.
+      Apply the resources that own them first, or add them as site templates.
+    success_msg: >-
+      {{ ise_apply_obj_name }}: {{ ise_apply_policy_refs | length }}
+      references,
+      {{ ise_apply_policy_refs | length - ise_apply_refs_advisory | length }}
+      confirmed present,
+      {{ ise_apply_refs_advisory | length }} inconclusive
+  when: not (ise_dry_run | bool)

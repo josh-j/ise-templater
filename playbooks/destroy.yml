@@ -1,0 +1,38 @@
+---
+# Remove what the site templates created, in reverse dependency order.
+#
+#   ./ise destroy                                                  # show only
+#   ./ise destroy --force
+#
+# This one is dry by default, the opposite of apply.yml. You have to ask for
+# the writes.
+#
+# By default it only touches objects the SITE templates name -- the things
+# this tool created. The exported templates are an export of what the
+# appliance already had, much of it Cisco built-ins, and pointing a delete at
+# them would strip the deployment. That needs an explicit second flag and
+# still refuses without it.
+
+- name: Destroy site-template objects
+  hosts: ise_target
+  gather_facts: false
+  module_defaults:
+    ansible.builtin.uri:
+      user: "{{ ise_user }}"
+      password: "{{ ise_password }}"
+      force_basic_auth: true
+      validate_certs: "{{ ise_validate_certs }}"
+      timeout: "{{ ise_timeout }}"
+      headers:
+        Accept: application/json
+        # ERS answers 415 to a DELETE with no Content-Type, which reads like a
+        # malformed body on a request that has no body at all.
+        Content-Type: application/json
+  vars:
+    ise_dry_run: true
+    ise_site_only: true
+    ise_confirm_destroy_exported: false
+
+  roles:
+    - ise_common
+    - ise_destroy

@@ -1,0 +1,28 @@
+---
+# One rule collection (authentication, authorization or exception) of one
+# policy set.
+
+- name: "Read the target's rules: {{ ise_apply_obj_name ~ '/' ~ child }}"
+  ansible.builtin.uri:
+    url: >-
+      {{ ise_api_url }}{{ res.path }}/{{ ise_apply_policyset_id }}/{{ child }}
+    status_code: [200, 404]
+  register: ise_apply_target_rules
+  check_mode: false
+
+- name: "Index those rules by name: {{ ise_apply_obj_name ~ '/' ~ child }}"
+  ansible.builtin.set_fact:
+    ise_apply_target_rule_ids: >-
+      {{ ise_apply_target_rules.json.response | default([], true)
+         | ise_index('rule.name', 'rule.id') }}
+
+# In rank order, so a fresh policy set ends up with its rules in the order the
+# source had them. ISE appends a created rule at the rank it is given.
+- name: "Apply each rule: {{ ise_apply_obj_name ~ '/' ~ child }}"
+  ansible.builtin.include_tasks: policyset_rule.yml
+  loop: >-
+    {{ (ise_apply_doc[child] | default([], true))
+    | sort(attribute='rule.rank') }}
+  loop_control:
+    loop_var: rule_doc
+    label: "{{ rule_doc.rule.name }}"
